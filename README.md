@@ -85,6 +85,14 @@ Expected frontend value:
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
+For Vercel production, set `NEXT_PUBLIC_API_URL` to the separate deployed FastAPI backend origin:
+
+```env
+NEXT_PUBLIC_API_URL=https://your-backend-domain
+```
+
+Do not set this to the Vercel frontend URL. Frontend API wrappers compose requests through `lib/api/client.ts`, for example `NEXT_PUBLIC_API_URL + /api/profile/analyze`, so the browser calls the FastAPI service directly.
+
 Create the backend environment file:
 
 ```powershell
@@ -96,6 +104,12 @@ Expected backend value:
 
 ```env
 FRONTEND_URL=http://localhost:3000
+```
+
+For production backend hosting, set `FRONTEND_URL` to the deployed Vercel frontend origin:
+
+```env
+FRONTEND_URL=https://your-frontend-domain.vercel.app
 ```
 
 ## Run the Backend
@@ -155,6 +169,29 @@ pytest
 
 ## Deployment
 
+### Architecture
+
+- Frontend: Next.js on Vercel
+- Backend: FastAPI on a separate Python backend host
+- Communication: HTTPS REST API from the browser to the FastAPI backend
+
+Local URLs:
+
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8000`
+
+Production URLs:
+
+- Frontend: `https://YOUR-VERCEL-DOMAIN`
+- Backend: `https://YOUR-BACKEND-DOMAIN`
+
+Environment variables:
+
+- Frontend: `NEXT_PUBLIC_API_URL`
+- Backend: `FRONTEND_URL`
+
+Do not commit real secrets, private deployment URLs, or API keys.
+
 Recommended split deployment:
 
 - Frontend: Vercel
@@ -163,6 +200,12 @@ Recommended split deployment:
 ### Backend Deployment
 
 Deploy the `backend` folder as a Python web service.
+
+Root directory:
+
+```text
+backend
+```
 
 Build command:
 
@@ -179,7 +222,15 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 Set this backend environment variable after the frontend is deployed:
 
 ```env
-FRONTEND_URL=https://your-frontend-domain.vercel.app
+FRONTEND_URL=https://YOUR-VERCEL-DOMAIN
+```
+
+Verify the deployed backend before connecting Vercel:
+
+```text
+GET https://YOUR-BACKEND-DOMAIN/
+GET https://YOUR-BACKEND-DOMAIN/health
+GET https://YOUR-BACKEND-DOMAIN/docs
 ```
 
 ### Frontend Deployment
@@ -195,14 +246,13 @@ npm run build
 Set this frontend environment variable:
 
 ```env
-NEXT_PUBLIC_API_URL=https://your-backend-domain.onrender.com
+NEXT_PUBLIC_API_URL=https://YOUR-BACKEND-DOMAIN
 ```
 
-After both services are live, update the backend `FRONTEND_URL` to the final frontend domain so CORS allows browser requests.
+In Vercel, add `NEXT_PUBLIC_API_URL` under Project Settings, then redeploy so Next.js bakes the public variable into the production build. After both services are live, update the backend `FRONTEND_URL` to the final frontend domain so CORS allows browser requests.
 
 ## Notes
 
 - `.env.local`, backend `.env`, `node_modules`, `.next`, and Python cache files are ignored by Git.
 - The frontend uses `lib/api/client.ts` for API calls. React pages should not hardcode backend URLs.
 - The prototype stores successful profile, skill gap, recommendation, and learning path responses in localStorage so users can navigate between screens without repeating onboarding.
-

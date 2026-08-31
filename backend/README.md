@@ -29,19 +29,84 @@ Create a local `.env` file from the example:
 copy .env.example .env
 ```
 
-Current setting:
+Local development setting:
 
 ```env
 FRONTEND_URL=http://localhost:3000
 ```
 
-## Run Command
+For production, set `FRONTEND_URL` to the deployed Vercel frontend origin:
+
+```env
+FRONTEND_URL=https://your-frontend-domain.vercel.app
+```
+
+If you need to allow more than one deployed frontend origin, provide a comma-separated list. Local origins for `http://localhost:3000` and `http://127.0.0.1:3000` are always supported for development.
+
+## Local Run Command
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
+## Production Deployment
+
+Deploy this directory as the backend service.
+
+Root directory:
+
+```text
+backend
+```
+
+Build/install command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start command:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Required production environment variable:
+
+```env
+FRONTEND_URL=https://YOUR-VERCEL-DOMAIN
+```
+
+For Render, Railway, Fly.io, or similar Python web service hosts, use the platform-provided `PORT` environment variable in the start command. Do not hardcode port `8000` for production.
+
+## Deployment Checks
+
+Health:
+
+```text
+GET /health
+```
+
+Swagger:
+
+```text
+GET /docs
+```
+
+Root status:
+
+```text
+GET /
+```
+
 ## API Endpoint
+
+Available production endpoints:
+
+- `POST /api/profile/analyze`
+- `POST /api/skills/gap`
+- `POST /api/recommendations`
+- `POST /api/learning-path`
 
 `POST /api/profile/analyze`
 
@@ -102,5 +167,5 @@ Receives learner onboarding information, validates it, normalizes the profile, c
 ## Testing
 
 ```bash
-pytest
+python -m pytest
 ```
