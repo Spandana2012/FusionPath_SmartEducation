@@ -1,59 +1,220 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BookOpen, Bot, CheckCircle2, Compass, Lightbulb, Play, TrendingUp } from "lucide-react";
+import { FormEvent, useState } from "react";
+import {
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  ExternalLink,
+  Gauge,
+  MessageCircle,
+  Route,
+  Send,
+  Target,
+} from "lucide-react";
+
+import { LearningSectionNav } from "@/components/layout/section-nav";
+import { useLearnerContext } from "@/components/experience/learner-context-provider";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { defaultLearnerState, hydrateLearnerState, saveLearnerState, type LearnerState } from "@/lib/learner-store";
+import { askTutor, evaluatePractice } from "@/lib/api/adaptive";
+import type { LearnerContext, LearningMilestone, RecommendationItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export type WorkspaceView = "dashboard" | "roadmap" | "learn" | "practice" | "projects" | "graph" | "career" | "tutor" | "progress" | "profile";
-const mission = { title: "Learn AWS IAM fundamentals", duration: "25 minutes", reason: "IAM is required for the AWS deployment milestone you’re working toward." };
-const milestones = [
-  { title: "Foundations", skills: ["Linux", "Networking"], status: "complete", why: "Build the operating and network fundamentals every cloud deployment depends on." },
-  { title: "Backend", skills: ["Java", "Spring Boot"], status: "complete", why: "Turn your existing backend strengths into deployable services." },
-  { title: "Cloud", skills: ["AWS", "Docker", "CI/CD"], status: "current", why: "Learn to package and securely deploy your services on AWS." },
-  { title: "Infrastructure", skills: ["Kubernetes", "Terraform"], status: "locked", why: "Automate and operate cloud workloads at scale." },
-  { title: "Production", skills: ["Monitoring", "Security"], status: "locked", why: "Make systems observable, dependable, and safe." },
-];
+export type WorkspaceView = "dashboard" | "roadmap" | "learn" | "practice" | "projects" | "progress" | "graph" | "career" | "tutor" | "profile";
 
 export function LearningWorkspace({ view }: { view: WorkspaceView }) {
-  const [state, setState] = useState<LearnerState>(defaultLearnerState);
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => { void hydrateLearnerState().then((next) => { setState(next); setHydrated(true); }); }, []);
-  function update(next: LearnerState) { setState(next); void saveLearnerState(next); }
-  if (!hydrated) return <main className="container py-10"><div className="h-72 animate-pulse rounded-xl bg-secondary" /></main>;
-  const views: Record<WorkspaceView, React.ReactNode> = {
-    dashboard: <Dashboard state={state} update={update} />,
-    roadmap: <Roadmap state={state} />,
-    learn: <Learn state={state} update={update} />,
-    practice: <Practice state={state} update={update} />,
-    projects: <Projects state={state} update={update} />,
-    graph: <Graph state={state} />,
-    career: <Career state={state} />,
-    tutor: <Tutor state={state} />,
-    progress: <Analytics state={state} />,
-    profile: <Profile state={state} />,
-  };
-  return <main className="min-h-[calc(100vh-5rem)] bg-slate-50 text-slate-900">{views[view]}</main>;
+  const { context, loading, error, refresh } = useLearnerContext();
+  const showLearningNav = ["roadmap", "learn", "practice", "projects", "progress"].includes(view);
+
+  if (loading && !context) return <WorkspaceLoading showLearningNav={showLearningNav} />;
+  if (!context) return <EmptyLearnerState showLearningNav={showLearningNav} error={error} />;
+
+  return (
+    <main className="min-h-[calc(100vh-5rem)] bg-background">
+      {showLearningNav ? <LearningSectionNav /> : null}
+      {error ? <p className="container pt-4 text-sm text-muted-foreground">{error}</p> : null}
+      {view === "dashboard" ? <Dashboard context={context} /> : null}
+      {view === "roadmap" ? <Roadmap context={context} /> : null}
+      {view === "learn" ? <Learn context={context} /> : null}
+      {view === "practice" ? <Practice context={context} onRefresh={refresh} /> : null}
+      {view === "projects" ? <Projects context={context} /> : null}
+      {view === "progress" ? <ProgressView context={context} /> : null}
+      {view === "graph" ? <SkillsRedirect /> : null}
+      {view === "career" ? <Career context={context} /> : null}
+      {view === "tutor" ? <Tutor context={context} /> : null}
+      {view === "profile" ? <Profile context={context} /> : null}
+    </main>
+  );
 }
 
-function Page({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) { return <section className="mx-auto max-w-7xl px-4 py-8 sm:px-7 lg:py-10"><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-700">{eyebrow}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{title}</h1>{children}</section>; }
-function Dashboard({ state, update }: { state: LearnerState; update: (s: LearnerState) => void }) {
-  const start = () => update({ ...state, completedLessons: [...new Set([...state.completedLessons, mission.title])], activity: { ...state.activity, minutes: state.activity.minutes + 25 }, readiness: Math.min(100, state.readiness + 2) });
-  return <Page eyebrow="Personal learning command center" title={`Good morning, ${state.name}`}><p className="mt-2 text-slate-600">Your goal: <b>{state.goal}</b> · You’re {state.readiness}% career-ready.</p><div className="mt-8 grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><section className="rounded-2xl bg-[#081b3d] p-6 text-white shadow-xl sm:p-8"><p className="text-xs font-bold tracking-[.16em] text-blue-200">CAREER READINESS</p><div className="mt-4 flex items-end justify-between"><p className="text-6xl font-semibold">{state.readiness}%</p><span className="rounded-full bg-emerald-400/15 px-3 py-1 text-sm text-emerald-300">↑ 8% this month</span></div><p className="mt-6 text-blue-100">Target: {state.goal} · Estimated readiness: 5 months</p><Progress className="mt-4 bg-white/15" value={state.readiness} /></section><section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-bold tracking-[.16em] text-slate-500">THIS WEEK</p><div className="mt-5 grid grid-cols-2 gap-4 text-center"><Metric value={`${state.activity.minutes}m`} label="Learning"/><Metric value={state.activity.questions} label="Practice"/><Metric value={state.activity.projects} label="Projects"/><Metric value={state.skills.filter(s=>s.mastery>=75).length} label="Strong skills"/></div></section></div><section className="mt-5 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-6 shadow-sm"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold tracking-[.16em] text-blue-700">TODAY’S MISSION</p><h2 className="mt-2 text-2xl font-semibold">{mission.title}</h2><p className="mt-2 max-w-2xl text-sm text-slate-600">{mission.duration} · Why this matters: {mission.reason}</p></div><Button onClick={start} className="bg-blue-700 hover:bg-blue-800">{state.completedLessons.includes(mission.title) ? "Completed" : "Start learning"}<ArrowRight /></Button></div></section><div className="mt-8 grid gap-5 lg:grid-cols-[1fr_.8fr]"><section className="rounded-2xl border border-slate-200 bg-white p-6"><h2 className="font-semibold">Skill health</h2><div className="mt-5 space-y-4">{state.skills.slice(0,6).map(s=><SkillBar key={s.name} {...s}/>)}</div></section><section className="rounded-2xl border border-slate-200 bg-white p-6"><p className="text-xs font-bold tracking-[.16em] text-blue-700">ONE CLEAR NEXT STEP</p><h2 className="mt-3 text-xl font-semibold">Complete Docker networking before starting Kubernetes.</h2><p className="mt-3 text-sm leading-6 text-slate-600">It unlocks a foundational concept for container orchestration and keeps your roadmap efficient.</p><Button asChild variant="outline" className="mt-5"><Link href="/roadmap">View roadmap <Compass /></Link></Button></section></div></Page>;
+function Dashboard({ context }: { context: LearnerContext }) {
+  const priorityGap = context.skill_gap.skill_gaps[0];
+  const completed = context.progress.completed_milestones;
+  const total = context.progress.total_milestones;
+  const nextResource = context.recommendations.recommendations[0];
+
+  return (
+    <WorkspacePage eyebrow="Personal dashboard" title={`Your path to ${context.skill_gap.target_role}`} description={context.learning_path.path.summary}>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Readiness" value={`${context.skill_gap.readiness_score}%`} icon={Gauge} />
+        <Metric label="Current focus" value={priorityGap?.skill ?? "Path review"} icon={Target} />
+        <Metric label="Path progress" value={`${completed} / ${total}`} icon={Route} />
+        <Metric label="Practice attempts" value={String(context.progress.practice_attempts)} icon={CheckCircle2} />
+      </div>
+      <section className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="Next recommended action" icon={ArrowRight}>
+          <h2 className="text-xl font-semibold text-foreground">{context.progress.current_milestone ?? nextResource?.title ?? "Review your skill gaps"}</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{priorityGap ? `Focus on ${priorityGap.skill}: ${priorityGap.explanation}` : "Complete onboarding analysis to receive your next action."}</p>
+          <Button asChild className="mt-5"><Link href={priorityGap ? "/practice" : "/skill-analysis"}>Continue learning <ArrowRight className="h-4 w-4" /></Link></Button>
+        </Panel>
+        <Panel title="Learning path" icon={Route}>
+          <Progress value={total ? (completed / total) * 100 : 0} aria-label="Learning path progress" />
+          <p className="mt-3 text-sm text-muted-foreground">{completed} of {total} milestones completed.</p>
+          <p className="mt-4 text-sm font-medium text-foreground">{context.progress.current_milestone ?? "All available milestones are complete."}</p>
+        </Panel>
+      </section>
+      <section className="mt-6 grid gap-5 lg:grid-cols-2">
+        <Panel title="Strengths" icon={CheckCircle2}><div className="flex flex-wrap gap-2">{context.skill_gap.strengths.length ? context.skill_gap.strengths.map((skill) => <Badge key={skill.skill} variant="secondary">{skill.skill}</Badge>) : <p className="text-sm text-muted-foreground">No strengths have been confirmed yet.</p>}</div></Panel>
+        <Panel title="Recommended resource" icon={BookOpen}>{nextResource ? <ResourceSummary resource={nextResource} /> : <p className="text-sm text-muted-foreground">No recommendation is available for the current gaps.</p>}</Panel>
+      </section>
+    </WorkspacePage>
+  );
 }
-function Metric({ value, label }: { value: string|number; label: string }) { return <div><p className="text-2xl font-semibold text-slate-950">{value}</p><p className="mt-1 text-xs text-slate-500">{label}</p></div>; }
-function SkillBar({ name, mastery, status }: { name:string; mastery:number; status:string }) { return <div><div className="mb-2 flex justify-between text-sm"><span className="font-medium">{name}</span><span className="text-slate-500">{mastery}% · {status}</span></div><Progress value={mastery}/></div>; }
-function Roadmap({ state }: { state: LearnerState }) { const [open, setOpen] = useState(2); return <Page eyebrow="Adaptive learning plan" title="Career roadmap"><p className="mt-2 text-slate-600">A sequenced path that responds to your assessment evidence.</p>{state.adapted && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><b>Roadmap adjusted.</b> Your AWS networking assessment identified a gap, so VPC Essentials is now scheduled before Docker.</div>}<div className="mt-8 space-y-3">{milestones.map((m,i)=><article key={m.title} className={cn("rounded-xl border bg-white p-5 shadow-sm",m.status==="current"&&"border-blue-300 ring-1 ring-blue-100")}><button className="flex w-full items-center justify-between text-left" onClick={()=>setOpen(open===i?-1:i)}><div className="flex items-center gap-4"><span className={cn("flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold",m.status==="complete"?"bg-emerald-100 text-emerald-700":m.status==="current"?"bg-blue-700 text-white":"bg-slate-100 text-slate-500")}>{m.status==="complete"?"✓":String(i+1).padStart(2,"0")}</span><div><h2 className="font-semibold">{m.title} {m.status==="current"&&<span className="ml-2 text-xs font-medium text-blue-700">CURRENT</span>}</h2><p className="text-sm text-slate-500">{m.skills.join(" · ")}</p></div></div><span className="text-sm text-slate-500">{open===i?"Hide":"View"}</span></button>{open===i&&<div className="mt-5 border-t pt-4 text-sm text-slate-600"><p>{m.why}</p>{m.title==="Cloud"&&state.adapted&&<p className="mt-3 rounded-lg bg-blue-50 p-3 text-blue-950"><b>Inserted prerequisite:</b> VPC fundamentals → Subnets → Routing → Security Groups → AWS assessment</p>}<div className="mt-4 flex gap-3"><Button size="sm">Continue milestone <ArrowRight /></Button><Button size="sm" variant="outline">Take assessment</Button></div></div>}</article>)}</div></Page>; }
-function Learn({ state, update }: { state:LearnerState;update:(s:LearnerState)=>void }) { return <Page eyebrow="Focused learning" title="Learn AWS IAM fundamentals"><div className="mt-8 grid gap-5 lg:grid-cols-[1.3fr_.7fr]"><article className="rounded-2xl bg-[#081b3d] p-8 text-white"><BookOpen className="h-8 w-8 text-blue-200"/><h2 className="mt-7 text-2xl font-semibold">Identity is the control plane for your cloud.</h2><p className="mt-4 max-w-xl leading-7 text-blue-100">IAM defines who can access AWS resources and what actions they can perform. Start with users, roles, policies, and least privilege.</p><Button className="mt-7 bg-white text-slate-900 hover:bg-slate-100" onClick={()=>update({...state,activity:{...state.activity,minutes:state.activity.minutes+15}})}><Play/> Mark 15 min studied</Button></article><aside className="rounded-2xl border bg-white p-6"><h2 className="font-semibold">Up next</h2><ol className="mt-4 space-y-4 text-sm text-slate-600"><li>1. IAM users and roles</li><li>2. Policy evaluation logic</li><li>3. Least-privilege lab</li></ol><Link href="/tutor" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">Need an explanation? Ask Tutor <Bot className="h-4 w-4"/></Link></aside></div></Page>; }
-function Practice({ state, update }: {state:LearnerState;update:(s:LearnerState)=>void}) { const [answer,setAnswer]=useState<string|null>(null); const correct=answer==="B"; const submit=(a:string)=>{setAnswer(a);const next={...state,activity:{...state.activity,questions:state.activity.questions+1}};if(a!=="B")next.mistakes={...state.mistakes,"Security groups vs NACLs":(state.mistakes["Security groups vs NACLs"]??0)+1};else next.skills=state.skills.map(s=>s.name==="AWS"?{...s,mastery:Math.min(100,s.mastery+4)}:s);if(a!=="B"&&(next.mistakes["Security groups vs NACLs"]>=3))next.adapted=true;update(next);}; return <Page eyebrow="Practice center" title="AWS networking"><div className="mt-6 flex flex-wrap gap-2">{["AWS","Intermediate","Scenario","Networking"].map(x=><span key={x} className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium">{x}</span>)}</div><article className="mt-6 max-w-3xl rounded-2xl border bg-white p-6 shadow-sm"><p className="text-sm font-medium text-blue-700">Scenario · Question 4 of 10</p><h2 className="mt-4 text-xl font-semibold">Which control is stateful and applies at the instance level in an AWS VPC?</h2><div className="mt-6 grid gap-3">{[["A","Network ACL"],["B","Security group"],["C","Route table"],["D","Internet gateway"]].map(([key,label])=><button key={key} onClick={()=>submit(key)} className={cn("rounded-xl border p-4 text-left text-sm hover:border-blue-500",answer===key&&(correct?"border-emerald-500 bg-emerald-50":"border-rose-400 bg-rose-50"))}>{key}. {label}</button>)}</div>{answer&&<div className={cn("mt-6 rounded-xl p-4 text-sm",correct?"bg-emerald-50 text-emerald-950":"bg-amber-50 text-amber-950")}><b>{correct?"Correct — solid distinction.":"Your approach is close."}</b> {correct?"Security groups are stateful and attach to ENIs/instances.":"A Network ACL is stateless and works at subnet level; a security group is stateful and works at the instance level."}<div className="mt-3"><Button size="sm" variant="outline" onClick={()=>setAnswer(null)}>{correct?"Next question":"Try again"}</Button></div></div>}</article><section className="mt-8 rounded-2xl border bg-white p-6"><h2 className="font-semibold">Mistake journal</h2><p className="mt-1 text-sm text-slate-500">Patterns become the next useful practice session.</p><div className="mt-4 space-y-3">{Object.entries(state.mistakes).map(([m,count])=><div key={m} className="flex justify-between rounded-lg bg-slate-50 p-3 text-sm"><span>AWS · {m}</span><b>{count} mistakes</b></div>)}</div></section></Page>; }
-function Projects({ state, update }: {state:LearnerState;update:(s:LearnerState)=>void}) { const [started,setStarted]=useState(false); return <Page eyebrow="Project lab" title="Build proof of your skills"><article className="mt-7 rounded-2xl border bg-white p-6 shadow-sm"><div className="flex flex-col justify-between gap-4 sm:flex-row"><div><p className="text-sm font-semibold text-blue-700">INTERMEDIATE · 5 HOURS</p><h2 className="mt-2 text-2xl font-semibold">Deploy a Spring Boot API on AWS</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Package a REST API, configure EC2, deploy it safely, and add basic monitoring.</p></div><Button onClick={()=>{setStarted(true);update({...state,activity:{...state.activity,projects:Math.max(1,state.activity.projects)}})}}>{started?"Project started":"Start project"}<ArrowRight/></Button></div><div className="mt-7 grid gap-3 sm:grid-cols-2">{["Build API","Containerize","Configure EC2","Deploy & monitor"].map((t,i)=><div key={t} className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-sm"><CheckCircle2 className={cn("h-4 w-4",started&&i===0?"text-emerald-600":"text-slate-300")}/>{t}</div>)}</div>{started&&<p className="mt-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-950"><b>AI Project Mentor:</b> Share your Dockerfile, command, and error log if you get stuck. I’ll guide the debugging process.</p>}</article></Page>; }
-function Graph({ state }: {state:LearnerState}) { return <Page eyebrow="Skill dependencies" title="Your skill graph"><p className="mt-2 text-slate-600">Status is based on completed learning and practice performance.</p><div className="mt-8 overflow-x-auto rounded-2xl border bg-white p-8"><div className="min-w-[640px] text-center"><Node label="Cloud Engineer" status="strong"/><div className="mx-auto h-8 w-px bg-slate-300"/><div className="flex justify-center gap-16"><div><Node label="AWS" status="weak"/><div className="mx-auto h-7 w-px bg-slate-300"/><div className="flex gap-5"><Node label="IAM" status="strong"/><Node label="VPC" status="weak"/></div></div><div><Node label="Docker" status="learning"/><div className="mx-auto h-7 w-px bg-slate-300"/><Node label="Containers" status="learning"/></div><Node label="Networking" status="learning"/></div></div></div><div className="mt-5 flex flex-wrap gap-4 text-xs text-slate-500">{["Mastered","Strong","Learning","Weak","Locked"].map(x=><span key={x}>● {x}</span>)}</div></Page>; }
-function Node({label,status}:{label:string;status:string}) { return <button className={cn("rounded-lg border px-4 py-2 text-sm font-medium",status==="weak"?"border-amber-300 bg-amber-50":status==="strong"?"border-emerald-300 bg-emerald-50":"border-blue-200 bg-blue-50")}>{label}<span className="sr-only">, {status}</span></button>; }
-function Career({state}:{state:LearnerState}) { return <Page eyebrow="Career center" title="Cloud Engineer readiness"><div className="mt-8 grid gap-5 lg:grid-cols-[1fr_.8fr]"><section className="rounded-2xl border bg-white p-6"><h2 className="font-semibold">Role requirements</h2><div className="mt-5 space-y-4">{state.skills.slice(2).map(s=><SkillBar key={s.name}{...s}/>)}</div></section><aside className="rounded-2xl border bg-white p-6"><h2 className="font-semibold">Readiness reasoning</h2><p className="mt-3 text-sm leading-6 text-slate-600">Your score reflects technical skills, project work, practice evidence, and interview preparation—not a vanity score.</p><ul className="mt-5 space-y-3 text-sm"><li>Technical skills <b className="float-right">62%</b></li><li>Practical experience <b className="float-right">58%</b></li><li>Problem solving <b className="float-right">70%</b></li><li>Projects <b className="float-right">50%</b></li></ul><Button asChild className="mt-6"><Link href="/practice">Practice weak skills <ArrowRight/></Link></Button></aside></div></Page>; }
-function Tutor({state}:{state:LearnerState}) { const [messages,setMessages]=useState([{role:"coach",text:"I’m your FusionPath learning coach. You’re focused on AWS networking. I’ll start with a question, hint, or example—not a shortcut."}]); const [input,setInput]=useState(""); const send=(text:string)=>{if(!text.trim())return;setMessages([...messages,{role:"you",text},{role:"coach",text:`Let’s reason it out. What is the scope of the resource you’re considering, and is its traffic stateful? That distinction will guide the answer.`}]);setInput("");}; return <Page eyebrow="Contextual AI tutor" title="Learn with your coach"><div className="mt-7 max-w-3xl rounded-2xl border bg-white shadow-sm"><div className="border-b p-5"><p className="font-semibold">Current focus: AWS Networking</p><p className="mt-1 text-sm text-slate-500">Uses your roadmap, weak skills, and recent mistakes.</p></div><div className="min-h-72 space-y-4 p-5">{messages.map((m,i)=><div key={i} className={cn("max-w-[85%] rounded-xl p-3 text-sm leading-6",m.role==="you"?"ml-auto bg-blue-700 text-white":"bg-slate-100 text-slate-800")}>{m.text}</div>)}</div><div className="flex flex-wrap gap-2 border-t px-5 pt-4">{["Explain simply","Give me an example","Give me a hint","Test me","I’m stuck"].map(x=><button key={x} onClick={()=>send(x)} className="rounded-full border px-3 py-1.5 text-xs font-medium hover:border-blue-500">{x}</button>)}</div><form className="flex gap-2 p-5" onSubmit={e=>{e.preventDefault();send(input)}}><input value={input} onChange={e=>setInput(e.target.value)} className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm" aria-label="Ask the AI tutor" placeholder="Ask about your current lesson…"/><Button type="submit">Send</Button></form></div></Page>; }
-function Analytics({state}:{state:LearnerState}) { return <Page eyebrow="Evidence-based progress" title="Your learning insights"><div className="mt-8 grid gap-5 sm:grid-cols-3"><MetricCard label="Learning time" value={`${state.activity.minutes} min`}/><MetricCard label="Practice questions" value={state.activity.questions}/><MetricCard label="Career readiness" value={`${state.readiness}%`}/></div><section className="mt-6 rounded-2xl border bg-white p-6"><h2 className="font-semibold">What FusionPath has learned</h2><div className="mt-5 grid gap-4 sm:grid-cols-2"><Insight icon={<TrendingUp/>} text="You learn best in focused 30–45 minute sessions."/><Insight icon={<Lightbulb/>} text="Scenario-based AWS questions need more deliberate practice."/></div></section></Page>; }
-function MetricCard({label,value}:{label:string;value:string|number}) { return <section className="rounded-2xl border bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p></section>; } function Insight({icon,text}:{icon:React.ReactNode;text:string}) { return <div className="flex gap-3 rounded-xl bg-blue-50 p-4 text-sm text-blue-950"><span className="text-blue-700">{icon}</span>{text}</div>; }
-function Profile({state}:{state:LearnerState}) { return <Page eyebrow="Learner profile" title={`${state.name}’s preferences`}><section className="mt-8 max-w-2xl rounded-2xl border bg-white p-6"><p className="text-sm text-slate-500">Career goal</p><p className="mt-1 text-lg font-semibold">{state.goal}</p><p className="mt-6 text-sm text-slate-500">Learning preference</p><p className="mt-1 text-lg font-semibold">Project-based, structured sessions</p><Button asChild variant="outline" className="mt-7"><Link href="/onboarding">Edit learning profile</Link></Button></section></Page>; }
+
+function Learn({ context }: { context: LearnerContext }) {
+  return <WorkspacePage eyebrow="My learning" title={context.learning_path.path.title} description={context.learning_path.path.summary}><div className="grid gap-5 lg:grid-cols-[1fr_20rem]"><section className="space-y-4">{context.learning_path.path.milestones.map((milestone) => <MilestoneRow key={milestone.id} milestone={milestone} />)}{!context.learning_path.path.milestones.length ? <EmptyPanel title="Your path is waiting for recommendations" actionHref="/recommendations" actionLabel="Review recommendations" /> : null}</section><Panel title="Path details" icon={Clock3}><Detail label="Timeline" value={`${context.learning_path.path.duration_months} months`} /><Detail label="Weekly pace" value={`${context.learning_path.path.weekly_hours} hours`} /><Detail label="Quality" value={context.learning_path.path_quality_score === null ? "Not scored" : `${context.learning_path.path_quality_score}%`} /></Panel></div></WorkspacePage>;
+}
+
+function Roadmap({ context }: { context: LearnerContext }) {
+  return <WorkspacePage eyebrow="My learning / roadmap" title="Your learning path, visualized" description="Every node below is generated from your current learning-path milestones."><div className="space-y-4">{context.learning_path.path.milestones.map((milestone, index) => <div key={milestone.id} className="flex items-start gap-4"><div className="flex flex-col items-center"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-sm font-semibold text-primary">{milestone.order}</span>{index < context.learning_path.path.milestones.length - 1 ? <span className="h-16 w-px bg-border" /> : null}</div><section className="surface-panel flex-1 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{milestone.skills.join(" / ")}</p><h2 className="mt-1 text-lg font-semibold text-foreground">{milestone.title}</h2></div><Badge variant="outline">{milestone.estimated_hours} hours</Badge></div><p className="mt-3 text-sm leading-6 text-muted-foreground">{milestone.description}</p></section></div>)}{!context.learning_path.path.milestones.length ? <EmptyPanel title="No roadmap milestones are available yet" actionHref="/recommendations" actionLabel="Build from recommendations" /> : null}</div></WorkspacePage>;
+}
+
+function Practice({ context, onRefresh }: { context: LearnerContext; onRefresh: () => Promise<void> }) {
+  const gap = context.skill_gap.skill_gaps[0];
+  const [selected, setSelected] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const correctAnswer = gap ? `Complete the current ${gap.skill} milestone` : "Review the learning path";
+  const options = gap ? [correctAnswer, `Skip ${gap.skill} and start an unrelated topic`] : [correctAnswer];
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!gap || !selected) return;
+    setSubmitting(true);
+    try {
+      const result = await evaluatePractice({ learner_id: context.learner_id, skill: gap.skill, question_id: `priority-${gap.skill}`, selected_answer: selected, correct_answer: correctAnswer });
+      setFeedback(result.feedback);
+      await onRefresh();
+    } catch {
+      setFeedback("Practice could not be recorded. Check that the backend is running and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <WorkspacePage eyebrow="My learning / practice" title={gap ? `Practice ${gap.skill}` : "Practice from your learning path"} description={gap ? `This exercise is tied to your highest-priority skill gap for ${context.skill_gap.target_role}.` : "Complete upstream analysis before starting practice."}>{gap ? <form onSubmit={submit} className="surface-panel max-w-3xl p-6"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Question 1</p><h2 className="mt-3 text-xl font-semibold text-foreground">Which action best supports your next step?</h2><div className="mt-5 space-y-3">{options.map((option) => <label key={option} className={cn("flex cursor-pointer items-start gap-3 rounded-md border p-4 text-sm", selected === option ? "border-primary bg-primary/5" : "border-border")}><input type="radio" name="practice-answer" value={option} checked={selected === option} onChange={() => setSelected(option)} className="mt-1" />{option}</label>)}</div><Button type="submit" className="mt-5" disabled={!selected || submitting}>{submitting ? "Recording..." : "Submit answer"}<ArrowRight className="h-4 w-4" /></Button>{feedback ? <p className="mt-4 rounded-md bg-secondary p-4 text-sm text-foreground" role="status">{feedback}</p> : null}</form> : <EmptyPanel title="Practice will appear after skill-gap analysis" actionHref="/onboarding" actionLabel="Complete onboarding" />}</WorkspacePage>;
+}
+
+function Projects({ context }: { context: LearnerContext }) {
+  const projects = context.recommendations.recommendations.filter((resource) => resource.type === "project");
+  return <WorkspacePage eyebrow="My learning / projects" title={`Projects for ${context.skill_gap.target_role}`} description="These projects are selected from your recommendations and mapped to your current gaps.">{projects.length ? <div className="grid gap-5 lg:grid-cols-2">{projects.map((project) => <ProjectCard key={project.resource_id} project={project} milestones={context.learning_path.path.milestones} />)}</div> : <EmptyPanel title="No project recommendation matches your current gaps" actionHref="/recommendations" actionLabel="Review recommendations" />}</WorkspacePage>;
+}
+
+function Career({ context }: { context: LearnerContext }) {
+  return <WorkspacePage eyebrow="Career readiness" title={context.skill_gap.target_role} description="Your readiness is the score returned by the shared skill-gap analysis, with next steps grounded in your learning path."><div className="grid gap-5 md:grid-cols-3"><Metric label="Readiness" value={`${context.skill_gap.readiness_score}%`} icon={Gauge} /><Metric label="Readiness label" value={formatLabel(context.skill_gap.readiness_label)} icon={Target} /><Metric label="Milestones" value={`${context.progress.completed_milestones} / ${context.progress.total_milestones}`} icon={Route} /></div><div className="mt-6 grid gap-5 lg:grid-cols-2"><Panel title="Strengths" icon={CheckCircle2}><SkillList items={context.skill_gap.strengths.map((skill) => `${skill.skill} (${skill.current_level}/${skill.required_level})`)} empty="No strengths confirmed yet." /></Panel><Panel title="Critical gaps" icon={CircleAlert}><SkillList items={context.skill_gap.missing_critical_skills} empty="No critical gaps returned." /></Panel></div><Panel title="Recommended next steps" icon={ArrowRight} className="mt-5"><ol className="space-y-3 text-sm text-muted-foreground">{nextSteps(context).map((step, index) => <li key={step} className="flex gap-3"><span className="font-semibold text-accent">{index + 1}.</span>{step}</li>)}</ol></Panel></WorkspacePage>;
+}
+
+function Tutor({ context }: { context: LearnerContext }) {
+  const [messages, setMessages] = useState<Array<{ role: "tutor" | "you"; text: string }>>([]);
+  const [input, setInput] = useState("");
+  const concept = context.skill_gap.skill_gaps[0]?.skill ?? context.learning_path.path.milestones[0]?.title ?? context.skill_gap.target_role;
+
+  async function send(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setInput("");
+    setMessages((current) => [...current, { role: "you", text: trimmed }]);
+    try {
+      const response = await askTutor({ learner_id: context.learner_id, message: trimmed, concept });
+      setMessages((current) => [...current, { role: "tutor", text: response.message }]);
+    } catch {
+      setMessages((current) => [...current, { role: "tutor", text: `Your current focus is ${concept}. Use the learning path and practice view to work through it.` }]);
+    }
+  }
+
+  return <WorkspacePage eyebrow="AI Tutor" title={`Tutor for ${context.skill_gap.target_role}`} description="This deterministic tutor is grounded in your current profile, skill gaps, and learning path. No external model is required."><section className="surface-panel max-w-3xl p-5"><div className="flex items-start gap-3 border-b border-border pb-4"><MessageCircle className="mt-1 h-5 w-5 text-accent" /><div><p className="font-semibold text-foreground">Current focus: {concept}</p><p className="mt-1 text-sm text-muted-foreground">{context.progress.current_milestone ?? "Review your completed path and choose a new focus."}</p></div></div><div className="min-h-56 space-y-3 py-5">{messages.length ? messages.map((message, index) => <p key={`${message.role}-${index}`} className={cn("max-w-[85%] rounded-md p-3 text-sm leading-6", message.role === "you" ? "ml-auto bg-primary text-primary-foreground" : "bg-secondary text-foreground")}>{message.text}</p>) : <p className="text-sm text-muted-foreground">Ask why a resource was recommended, what to learn next, or why {concept} matters for your target role.</p>}</div><div className="flex flex-wrap gap-2 border-t border-border pt-4">{[`Why ${concept}?`, "What should I learn next?", "Give me a hint"].map((prompt) => <Button key={prompt} type="button" variant="outline" size="sm" onClick={() => void send(prompt)}>{prompt}</Button>)}</div><form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input value={input} onChange={(event) => setInput(event.target.value)} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm" placeholder="Ask about your path" aria-label="Ask the AI tutor" /><Button type="submit" size="icon" aria-label="Send question"><Send className="h-4 w-4" /></Button></form></section></WorkspacePage>;
+}
+
+function Profile({ context }: { context: LearnerContext }) {
+  const profile = context.profile;
+  return <WorkspacePage eyebrow="Profile" title="Your learner profile" description="This profile is read from the persisted learner record that powers your skill analysis and learning path."><div className="grid gap-5 lg:grid-cols-2"><Panel title="Target" icon={Target}><Detail label="Career goal" value={profile.goal} /><Detail label="Experience" value={formatLabel(profile.experience_level)} /><Detail label="Timeline" value={`${profile.timeline_months} months`} /></Panel><Panel title="Learning preferences" icon={BookOpen}><Detail label="Weekly hours" value={String(profile.weekly_hours)} /><Detail label="Preference" value={formatLabel(profile.learning_preference)} /><Detail label="Completed courses" value={String(profile.completed_courses.length)} /></Panel></div><Panel title="Current skills" icon={CheckCircle2} className="mt-5"><div className="flex flex-wrap gap-2">{profile.skills.map((skill) => <Badge key={skill} variant="secondary">{skill}</Badge>)}</div><Button asChild variant="outline" className="mt-5"><Link href="/onboarding">Update profile <ArrowRight className="h-4 w-4" /></Link></Button></Panel></WorkspacePage>;
+}
+
+function ProgressView({ context }: { context: LearnerContext }) {
+  const percentage = context.progress.total_milestones ? (context.progress.completed_milestones / context.progress.total_milestones) * 100 : 0;
+  return <WorkspacePage eyebrow="My learning / progress" title="Evidence from your learning journey" description="Progress is based on persisted practice attempts, mistake events, and completed milestones."><div className="grid gap-5 md:grid-cols-3"><Metric label="Path progress" value={`${Math.round(percentage)}%`} icon={Route} /><Metric label="Practice attempts" value={String(context.progress.practice_attempts)} icon={CheckCircle2} /><Metric label="Mistake events" value={String(context.progress.mistake_events)} icon={CircleAlert} /></div><Panel title="Milestone sequence" icon={Route} className="mt-6"><div className="space-y-3">{context.learning_path.path.milestones.map((milestone) => { const done = context.progress.completed_lessons.includes(milestone.id); return <div key={milestone.id} className="flex items-center gap-3 text-sm"><CheckCircle2 className={cn("h-4 w-4", done ? "text-success" : "text-muted-foreground")} /><span className={done ? "text-foreground" : "text-muted-foreground"}>{milestone.title}</span></div>; })}</div></Panel></WorkspacePage>;
+}
+
+function ProjectCard({ project, milestones }: { project: RecommendationItem; milestones: LearningMilestone[] }) {
+  const milestone = milestones.find((item) => item.resource_ids.includes(project.resource_id));
+  return <article className="surface-panel p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{project.skill}</p><h2 className="mt-2 text-xl font-semibold text-foreground">{project.title}</h2></div><Badge variant="outline">{project.difficulty}</Badge></div><p className="mt-3 text-sm leading-6 text-muted-foreground">{project.description}</p><div className="mt-5 grid gap-3 text-sm sm:grid-cols-2"><Detail label="Why recommended" value={project.reason} /><Detail label="Supports milestone" value={milestone?.title ?? "Current skill gap"} /><Detail label="Estimated effort" value={`${project.estimated_hours} hours`} /><Detail label="Target skills" value={project.skills.join(", ")} /></div>{project.url ? <Button asChild variant="outline" className="mt-5"><a href={project.url} target="_blank" rel="noreferrer">Open project <ExternalLink className="h-4 w-4" /></a></Button> : null}</article>;
+}
+
+function MilestoneRow({ milestone }: { milestone: LearningMilestone }) {
+  return <article className="surface-panel p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Milestone {milestone.order}</p><h2 className="mt-1 text-lg font-semibold text-foreground">{milestone.title}</h2></div><Badge variant="outline">{milestone.estimated_hours} hours</Badge></div><p className="mt-3 text-sm leading-6 text-muted-foreground">{milestone.description}</p><div className="mt-4 flex flex-wrap gap-2">{milestone.skills.map((skill) => <Badge key={skill} variant="secondary">{skill}</Badge>)}</div></article>;
+}
+
+function ResourceSummary({ resource }: { resource: RecommendationItem }) {
+  return <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{resource.provider}</p><h2 className="mt-2 font-semibold text-foreground">{resource.title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{resource.reason}</p>{resource.url ? <a className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary" href={resource.url} target="_blank" rel="noreferrer">Open resource <ExternalLink className="h-3.5 w-3.5" /></a> : null}</div>;
+}
+
+function SkillsRedirect() {
+  return <WorkspacePage eyebrow="Skills" title="Skill analysis" description="The shared skill-gap analysis is the source of truth for your strengths, readiness, and gaps."><Button asChild><Link href="/skill-analysis">Open skill analysis <ArrowRight className="h-4 w-4" /></Link></Button></WorkspacePage>;
+}
+
+function WorkspacePage({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children: React.ReactNode }) {
+  return <section className="container py-8 lg:py-12"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</p><h1 className="mt-2 max-w-4xl font-display text-3xl font-semibold tracking-normal text-foreground sm:text-4xl">{title}</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p><div className="mt-8">{children}</div></section>;
+}
+
+function Panel({ title, icon: Icon, children, className }: { title: string; icon: typeof Route; children: React.ReactNode; className?: string }) {
+  return <section className={cn("surface-panel p-5", className)}><div className="mb-4 flex items-center gap-2"><Icon className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-accent">{title}</h2></div>{children}</section>;
+}
+
+function Metric({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Route }) {
+  return <section className="surface-panel p-5"><Icon className="h-4 w-4 text-accent" /><p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p><p className="mt-2 break-words text-lg font-semibold text-foreground">{value}</p></section>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return <div className="mb-3 last:mb-0"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p><p className="mt-1 text-sm text-foreground">{value}</p></div>;
+}
+
+function SkillList({ items, empty }: { items: string[]; empty: string }) {
+  return items.length ? <ul className="space-y-2 text-sm text-muted-foreground">{items.map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />{item}</li>)}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>;
+}
+
+function nextSteps(context: LearnerContext) {
+  const steps = context.skill_gap.skill_gaps.slice(0, 3).map((gap) => `Develop ${gap.skill} through its ${gap.priority}-priority learning-path milestone.`);
+  if (context.progress.current_milestone) steps.unshift(`Complete ${context.progress.current_milestone}.`);
+  return steps.length ? steps.slice(0, 3) : ["Review your skill analysis and choose the next available milestone."];
+}
+
+function formatLabel(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function EmptyLearnerState({ showLearningNav, error }: { showLearningNav: boolean; error: string | null }) {
+  return <main className="min-h-[calc(100vh-5rem)]">{showLearningNav ? <LearningSectionNav /> : null}<section className="container flex min-h-[calc(100vh-10rem)] items-center justify-center py-16"><section className="surface-panel max-w-xl p-8 text-center"><CircleAlert className="mx-auto h-8 w-8 text-accent" /><h1 className="mt-4 text-2xl font-semibold text-foreground">Complete onboarding to personalize this space</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">{error ?? "Your dashboard, learning path, practice, projects, and career readiness will appear after your profile is analyzed."}</p><Button asChild className="mt-6"><Link href="/onboarding">Start onboarding <ArrowRight className="h-4 w-4" /></Link></Button></section></section></main>;
+}
+
+function WorkspaceLoading({ showLearningNav }: { showLearningNav: boolean }) {
+  return <main className="min-h-[calc(100vh-5rem)]">{showLearningNav ? <LearningSectionNav /> : null}<section className="container py-12"><div className="h-8 w-64 animate-pulse rounded bg-secondary" /><div className="mt-8 grid gap-4 md:grid-cols-3"><div className="h-32 animate-pulse rounded-lg bg-secondary" /><div className="h-32 animate-pulse rounded-lg bg-secondary" /><div className="h-32 animate-pulse rounded-lg bg-secondary" /></div></section></main>;
+}
+
+function EmptyPanel({ title, actionHref, actionLabel }: { title: string; actionHref: string; actionLabel: string }) {
+  return <section className="surface-panel p-8 text-center"><h2 className="text-lg font-semibold text-foreground">{title}</h2><Button asChild variant="outline" className="mt-5"><Link href={actionHref}>{actionLabel} <ArrowRight className="h-4 w-4" /></Link></Button></section>;
+}

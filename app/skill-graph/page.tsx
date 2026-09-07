@@ -1,2 +1,5 @@
-import { LearningWorkspace } from "@/components/experience/learning-workspace";
-export default function SkillGraphPage() { return <LearningWorkspace view="graph" />; }
+import { redirect } from "next/navigation";
+
+export default function SkillGraphPage() {
+  redirect("/skill-analysis");
+}

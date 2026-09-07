@@ -2,6 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.learning_path import LearningPathResponse
+from app.schemas.profile import LearnerProfile
+from app.schemas.recommendations import RecommendationResponse
+from app.schemas.skills import SkillGapResponse
+
 
 SkillStatus = Literal["mastered", "strong", "learning", "weak", "locked"]
 
@@ -34,3 +39,21 @@ class StateResponse(BaseModel):
     learner_id: str
     roadmap_version: int
     state: LearnerStatePayload
+
+
+class LearnerProgress(BaseModel):
+    completed_milestones: int = 0
+    total_milestones: int = 0
+    current_milestone: str | None = None
+    practice_attempts: int = 0
+    mistake_events: int = 0
+    completed_lessons: list[str] = Field(default_factory=list)
+
+
+class LearnerContextResponse(BaseModel):
+    learner_id: str
+    profile: LearnerProfile
+    skill_gap: SkillGapResponse
+    recommendations: RecommendationResponse
+    learning_path: LearningPathResponse
+    progress: LearnerProgress

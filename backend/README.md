@@ -35,6 +35,23 @@ Local development setting:
 FRONTEND_URL=http://localhost:3000
 ```
 
+`DATABASE_URL` defaults to SQLite for local development. Production should use
+PostgreSQL, for example:
+
+```env
+DATABASE_URL=postgresql+psycopg://fusionpath:password@localhost:5432/fusionpath
+```
+
+After installing dependencies and before starting the API, apply the schema:
+
+```bash
+alembic upgrade head
+```
+
+The current roadmap snapshot is versioned, while mistake records and practice
+attempts are append-only rows. Do not use `Base.metadata.create_all()` as a
+production migration mechanism.
+
 For production, set `FRONTEND_URL` to the deployed Vercel frontend origin:
 
 ```env

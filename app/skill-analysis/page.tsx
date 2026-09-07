@@ -7,6 +7,7 @@ import { ArrowRight, BrainCircuit, CheckCircle2, ChevronDown, RotateCcw, Sparkle
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { SkillsSectionNav } from "@/components/layout/section-nav";
 import { getRecommendations } from "@/lib/api/recommendations";
 import { analyzeSkillGap } from "@/lib/api/skills";
 import type { BackendLearnerProfile, SkillGapItem, SkillGapResponse, SkillStrengthItem } from "@/lib/types";
@@ -98,8 +99,10 @@ export default function SkillAnalysisPage() {
 
   if (!skillGap) {
     return (
-      <main className="container flex min-h-[calc(100vh-4rem)] items-center justify-center py-16">
-        <section className="surface-panel max-w-xl p-8 text-center">
+      <main className="min-h-[calc(100vh-4rem)]">
+        <SkillsSectionNav />
+        <section className="container flex min-h-[calc(100vh-8rem)] items-center justify-center py-16">
+          <section className="surface-panel max-w-xl p-8 text-center">
           <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-md bg-secondary text-primary">
             <BrainCircuit className="h-6 w-6" aria-hidden="true" />
           </div>
@@ -116,6 +119,7 @@ export default function SkillAnalysisPage() {
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             {isRetrying ? "Mapping your skills..." : "Try again"}
           </Button>
+          </section>
         </section>
       </main>
     );
@@ -124,6 +128,7 @@ export default function SkillAnalysisPage() {
   if (isBuildingRecommendations) {
     return (
       <main className="min-h-[calc(100vh-4rem)] bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.45))]">
+        <SkillsSectionNav />
         <section className="container flex min-h-[calc(100vh-4rem)] items-center justify-center py-16">
           <RecommendationLoadingState />
         </section>
@@ -133,6 +138,7 @@ export default function SkillAnalysisPage() {
 
   return (
     <main className="min-h-[calc(100vh-4rem)] bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.45))]">
+      <SkillsSectionNav />
       <section className="container space-y-8 py-8 lg:py-12">
         <header className="grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-stretch">
           <section className="surface-panel p-6 sm:p-8">
@@ -181,7 +187,7 @@ export default function SkillAnalysisPage() {
           </OverviewPanel>
         </section>
 
-        <section className="space-y-4">
+        <section id="skill-gaps" className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="font-display text-2xl font-semibold tracking-normal text-foreground">Skill gaps</h2>

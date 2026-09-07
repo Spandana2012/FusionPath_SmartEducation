@@ -16,6 +16,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LearningSectionNav } from "@/components/layout/section-nav";
 import type { LearningMilestone, LearningPathResponse, RecommendationItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +33,10 @@ export default function LearningPathPage() {
 
   if (!learningPathResponse) {
     return (
-      <main className="container flex min-h-[calc(100vh-4rem)] items-center justify-center py-16">
-        <section className="surface-panel max-w-xl p-8 text-center">
+      <main className="min-h-[calc(100vh-4rem)]">
+        <LearningSectionNav />
+        <section className="container flex min-h-[calc(100vh-8rem)] items-center justify-center py-16">
+          <section className="surface-panel max-w-xl p-8 text-center">
           <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-md bg-secondary text-primary">
             <Route className="h-5 w-5" aria-hidden="true" />
           </div>
@@ -49,6 +52,7 @@ export default function LearningPathPage() {
               Recommendations
             </Link>
           </Button>
+          </section>
         </section>
       </main>
     );
@@ -56,6 +60,7 @@ export default function LearningPathPage() {
 
   return (
     <main className="min-h-[calc(100vh-4rem)] overflow-hidden bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.5))]">
+      <LearningSectionNav />
       <section className="relative border-b border-border">
         <div className="absolute inset-0 fusion-grid opacity-35" aria-hidden="true" />
         <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,hsl(var(--accent)),transparent)]" aria-hidden="true" />

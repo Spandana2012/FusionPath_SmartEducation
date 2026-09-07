@@ -195,3 +195,21 @@ export type LearningPathResponse = {
   message: string;
   path_quality_score: number | null;
 };
+
+export type LearnerProgress = {
+  completed_milestones: number;
+  total_milestones: number;
+  current_milestone: string | null;
+  practice_attempts: number;
+  mistake_events: number;
+  completed_lessons: string[];
+};
+
+export type LearnerContext = {
+  learner_id: string;
+  profile: BackendLearnerProfile;
+  skill_gap: SkillGapResponse;
+  recommendations: RecommendationResponse;
+  learning_path: LearningPathResponse;
+  progress: LearnerProgress;
+};

@@ -9,7 +9,7 @@ from app import models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
-if config.config_file_name:
+if config.config_file_name and config.get_section("loggers"):
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata
 

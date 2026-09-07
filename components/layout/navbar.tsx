@@ -6,16 +6,12 @@ import { motion } from "framer-motion";
 import {
   Bot,
   ChartNoAxesColumnIncreasing,
-  Compass,
   LayoutDashboard,
   Menu,
   Route,
   Sparkles,
   UserRound,
   X,
-  BookOpen,
-  BriefcaseBusiness,
-  Code2,
   Network,
 } from "lucide-react";
 import { useState } from "react";
@@ -26,14 +22,10 @@ import { Button } from "@/components/ui/button";
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Roadmap", href: "/roadmap", icon: Compass },
-  { label: "Learn", href: "/learn", icon: BookOpen },
-  { label: "Practice", href: "/practice", icon: Code2 },
-  { label: "Projects", href: "/projects", icon: BriefcaseBusiness },
-  { label: "Skill Graph", href: "/skill-graph", icon: Network },
+  { label: "My Learning", href: "/learning", icon: Route },
+  { label: "Skills", href: "/skill-analysis", icon: Network },
   { label: "Career", href: "/career", icon: ChartNoAxesColumnIncreasing },
   { label: "AI Tutor", href: "/tutor", icon: Bot },
-  { label: "Progress", href: "/progress", icon: ChartNoAxesColumnIncreasing },
   { label: "Profile", href: "/profile", icon: UserRound },
 ];
 
@@ -104,7 +96,7 @@ export function Navbar() {
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   const pathname = usePathname();
-  const isActive = pathname === item.href || (active && pathname === "/");
+  const isActive = isNavItemActive(item, pathname, active);
 
   return (
     <motion.div whileHover={{ y: -1 }} whileTap={{ y: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}>
@@ -128,6 +120,8 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 function MobileNavLink({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
   const Icon = item.icon;
+  const pathname = usePathname();
+  const isActive = isNavItemActive(item, pathname, active);
 
   return (
     <Link
@@ -135,11 +129,21 @@ function MobileNavLink({ item, active, onClick }: { item: NavItem; active: boole
       onClick={onClick}
       className={cn(
         "focus-ring flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground",
-        active && "bg-secondary text-foreground",
+        isActive && "bg-secondary text-foreground",
       )}
     >
-      {Icon ? <Icon className={cn("h-4 w-4", active && "text-accent")} aria-hidden="true" /> : null}
+      {Icon ? <Icon className={cn("h-4 w-4", isActive && "text-accent")} aria-hidden="true" /> : null}
       {item.label}
     </Link>
   );
+}
+
+function isNavItemActive(item: NavItem, pathname: string, fallback: boolean) {
+  const learningRoutes = ["/learning", "/learning-path", "/learn", "/roadmap", "/practice", "/projects", "/progress"];
+  const isLearningRoute = learningRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const isSkillsRoute = pathname === "/skill-analysis" || pathname.startsWith("/skill-analysis/") || pathname === "/skill-graph";
+
+  if (item.href === "/learning") return isLearningRoute;
+  if (item.href === "/skill-analysis") return isSkillsRoute;
+  return pathname === item.href || (fallback && pathname === "/");
 }

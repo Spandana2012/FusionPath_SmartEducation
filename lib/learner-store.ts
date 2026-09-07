@@ -11,21 +11,12 @@ export type LearnerState = {
 };
 
 export const defaultLearnerState: LearnerState = {
-  name: "Alex",
-  goal: "Cloud Engineer",
-  readiness: 42,
-  skills: [
-    { name: "Java", mastery: 90, status: "mastered" },
-    { name: "Spring Boot", mastery: 80, status: "strong" },
-    { name: "Linux", mastery: 75, status: "strong" },
-    { name: "Networking", mastery: 52, status: "learning" },
-    { name: "Docker", mastery: 60, status: "learning" },
-    { name: "AWS", mastery: 40, status: "weak" },
-    { name: "Kubernetes", mastery: 20, status: "locked" },
-    { name: "Terraform", mastery: 15, status: "locked" },
-  ],
+  name: "Learner",
+  goal: "",
+  readiness: 0,
+  skills: [],
   completedLessons: [],
-  mistakes: { "Security groups vs NACLs": 3, "Public subnet vs public IP": 2 },
+  mistakes: {},
   adapted: false,
   activity: { minutes: 145, questions: 12, projects: 1 },
 };
@@ -35,6 +26,7 @@ const LEARNER_ID_KEY = "fusionpath.persistedLearnerId";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 type StateEnvelope = { learner_id: string; roadmap_version: number; state: LearnerState };
+let pendingWrite: Promise<void> = Promise.resolve();
 
 export function readLearnerState(): LearnerState {
   if (typeof window === "undefined") return defaultLearnerState;
@@ -80,15 +72,18 @@ export async function hydrateLearnerState(): Promise<LearnerState> {
 export async function saveLearnerState(state: LearnerState): Promise<void> {
   cacheState(state);
   if (typeof window === "undefined") return;
-  const learnerId = window.localStorage.getItem(LEARNER_ID_KEY);
-  if (!learnerId) return;
-  try {
-    const envelope = await request<StateEnvelope>(`/api/adaptive/state/${encodeURIComponent(learnerId)}`, {
-      method: "PUT",
-      body: JSON.stringify(state),
-    });
-    cacheState(envelope.state);
-  } catch {
-    // Intentional: cached state remains usable offline and will be rehydrated next visit.
-  }
+  pendingWrite = pendingWrite.then(async () => {
+    const learnerId = window.localStorage.getItem(LEARNER_ID_KEY);
+    if (!learnerId) return;
+    try {
+      const envelope = await request<StateEnvelope>(`/api/adaptive/state/${encodeURIComponent(learnerId)}`, {
+        method: "PUT",
+        body: JSON.stringify(state),
+      });
+      cacheState(envelope.state);
+    } catch {
+      // Intentional: cached state remains usable offline and will be rehydrated next visit.
+    }
+  }).catch(() => undefined);
+  await pendingWrite;
 }

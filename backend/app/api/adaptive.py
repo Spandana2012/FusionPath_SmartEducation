@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models import Learner, MistakeEvent, PracticeAttempt, SkillGraphEdge, SkillGraphNode
-from app.schemas.adaptive import BootstrapRequest, LearnerStatePayload, StateResponse
+from app.schemas.adaptive import BootstrapRequest, LearnerContextResponse, LearnerStatePayload, StateResponse
 from app.services.adaptive_persistence_service import create_demo_learner, current_state, save_initial_state, save_state
+from app.services.learner_context_service import get_learner_context
 
 router = APIRouter(prefix="/api/adaptive", tags=["Adaptive learning"])
 
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/adaptive", tags=["Adaptive learning"])
 class TutorRequest(BaseModel):
     learner_id: str = Field(min_length=1, max_length=36)
     message: str = Field(min_length=1, max_length=2000)
-    concept: str = Field(default="AWS Networking", min_length=1, max_length=120)
+    concept: str | None = Field(default=None, max_length=120)
 
 
 class AttemptRequest(BaseModel):
@@ -52,6 +53,8 @@ def bootstrap_learner(payload: BootstrapRequest, db: Session = Depends(get_db)) 
         )
         roadmap = save_initial_state(db, learner.id, state)
         return StateResponse(learner_id=learner.id, roadmap_version=roadmap.version, state=roadmap.state)
+    if payload.initial_state is None:
+        raise HTTPException(status_code=422, detail="An initial learner state is required for a new learner.")
     learner, roadmap = create_demo_learner(db, payload.initial_state)
     return StateResponse(learner_id=learner.id, roadmap_version=roadmap.version, state=roadmap.state)
 
@@ -65,6 +68,12 @@ def get_state(learner_id: str, db: Session = Depends(get_db)) -> StateResponse:
     return StateResponse(learner_id=learner_id, roadmap_version=roadmap.version, state=roadmap.state)
 
 
+@router.get("/context/{learner_id}", response_model=LearnerContextResponse)
+def get_context(learner_id: str, db: Session = Depends(get_db)) -> LearnerContextResponse:
+    learner = require_learner(db, learner_id)
+    return get_learner_context(db, learner)
+
+
 @router.put("/state/{learner_id}", response_model=StateResponse)
 def put_state(learner_id: str, payload: LearnerStatePayload, db: Session = Depends(get_db)) -> StateResponse:
     learner = require_learner(db, learner_id)
@@ -76,21 +85,23 @@ def put_state(learner_id: str, payload: LearnerStatePayload, db: Session = Depen
 
 @router.post("/tutor/chat")
 def tutor_chat(payload: TutorRequest, db: Session = Depends(get_db)) -> dict:
-    require_learner(db, payload.learner_id)
+    learner = require_learner(db, payload.learner_id)
     message = payload.message.casefold()
+    concept = payload.concept or learner.goal
     if "hint" in message or "stuck" in message:
-        response, intent = "Start by identifying the resource scope, then ask whether traffic state is preserved.", "hint"
+        response, intent = f"Break {concept} into one small idea, then explain where it supports your {learner.goal} goal.", "hint"
     elif "example" in message:
-        response, intent = "For VPC traffic, security groups attach to instances and remember established connections; network ACLs operate at subnet boundaries.", "example"
+        response, intent = f"Use a small {concept} example: name the input, the decision or transformation, and the result you expect.", "example"
     else:
-        response, intent = f"Before we answer, what does {payload.concept} control and where is that control applied?", "socratic_question"
-    return {"message": response, "intent": intent, "concept": payload.concept, "next_action": "practice", "difficulty": "medium"}
+        response, intent = f"Before we answer, what does {concept} do, and why does it matter for becoming a {learner.goal}?", "socratic_question"
+    return {"message": response, "intent": intent, "concept": concept, "next_action": "practice", "difficulty": "medium"}
 
 
 @router.post("/tutor/hint")
 def tutor_hint(payload: TutorRequest, db: Session = Depends(get_db)) -> dict:
-    require_learner(db, payload.learner_id)
-    return {"message": "Compare instance-level stateful controls with subnet-level stateless controls.", "intent": "hint", "concept": payload.concept, "next_action": "retry", "difficulty": "medium"}
+    learner = require_learner(db, payload.learner_id)
+    concept = payload.concept or learner.goal
+    return {"message": f"Define {concept} in one sentence, then connect it to the next step in your {learner.goal} learning path.", "intent": "hint", "concept": concept, "next_action": "retry", "difficulty": "medium"}
 
 
 @router.post("/practice/evaluate")
@@ -100,14 +111,14 @@ def evaluate_practice(payload: AttemptRequest, db: Session = Depends(get_db)) ->
     db.add(PracticeAttempt(learner_id=payload.learner_id, skill=payload.skill, question_id=payload.question_id, selected_answer=payload.selected_answer, correct=correct, attempt_number=payload.attempts, elapsed_seconds=payload.elapsed_seconds, error_type=None if correct else "conceptual"))
     mistakes = 0
     if not correct:
-        concept = "Security groups vs NACLs" if payload.skill.casefold() in {"aws", "aws networking", "networking"} else payload.skill
+        concept = payload.skill
         db.add(MistakeEvent(learner_id=payload.learner_id, skill=payload.skill, concept=concept, question_id=payload.question_id))
         db.flush()
         mistakes = db.scalar(select(func.count(MistakeEvent.id)).where(MistakeEvent.learner_id == payload.learner_id, MistakeEvent.skill == payload.skill)) or 0
     db.commit()
     adapt = not correct and mistakes >= 3
-    feedback = "Correct. You distinguished resource scope and statefulness." if correct else "Your approach is close. Check whether the control is stateful and whether it applies to an instance or subnet."
-    return {"correct": correct, "feedback": feedback, "next_actions": ["try_again", "explain", "similar_question"], "roadmap_adjustment": {"needed": adapt, "insert_before": "Docker", "steps": ["VPC fundamentals", "Subnets", "Routing", "Security Groups", "AWS assessment"], "reason": f"{mistakes} recorded {payload.skill} mistakes"} if adapt else None}
+    feedback = f"Correct. You demonstrated understanding of {payload.skill}." if correct else f"Review the core concept behind {payload.skill}, then try the question again."
+    return {"correct": correct, "feedback": feedback, "next_actions": ["try_again", "explain", "similar_question"], "roadmap_adjustment": {"needed": adapt, "insert_before": payload.skill, "steps": [f"{payload.skill} fundamentals", f"{payload.skill} applied exercise", f"{payload.skill} assessment"], "reason": f"{mistakes} recorded {payload.skill} mistakes"} if adapt else None}
 
 
 @router.get("/progress/{learner_id}")

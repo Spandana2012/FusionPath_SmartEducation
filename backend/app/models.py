@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -17,6 +17,7 @@ def new_id() -> str:
 class Learner(Base):
     __tablename__ = "learners"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False, default="Learner")
     goal: Mapped[str] = mapped_column(String(240), nullable=False)
     experience_level: Mapped[str] = mapped_column(String(32), nullable=False)
     skills: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
@@ -50,6 +51,7 @@ class MistakeEvent(Base):
     event_type: Mapped[str] = mapped_column(String(32), nullable=False, default="incorrect_answer")
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("ix_mistake_events_learner_skill", "learner_id", "skill"),)
 
 
 class PracticeAttempt(Base):
@@ -85,3 +87,6 @@ class SkillGraphEdge(Base):
     source_node_id: Mapped[str] = mapped_column(String(120), nullable=False)
     target_node_id: Mapped[str] = mapped_column(String(120), nullable=False)
     relation: Mapped[str] = mapped_column(String(40), nullable=False, default="prerequisite")
+    __table_args__ = (
+        UniqueConstraint("learner_id", "source_node_id", "target_node_id", "relation", name="uq_skill_graph_edge"),
+    )
