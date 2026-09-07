@@ -1,5 +1,6 @@
-from uuid import uuid4
+from sqlalchemy.orm import Session
 
+from app.models import Learner
 from app.schemas.profile import CompletedCourse, LearnerProfile, LearnerProfileRequest, LearnerProfileResponse
 
 
@@ -19,7 +20,7 @@ ACRONYMS = {
 }
 
 
-def analyze_profile(profile: LearnerProfileRequest) -> LearnerProfileResponse:
+def analyze_profile(profile: LearnerProfileRequest, db: Session) -> LearnerProfileResponse:
     normalized_profile = LearnerProfile(
         goal=normalize_whitespace(profile.goal),
         experience_level=profile.experience_level,
@@ -30,9 +31,21 @@ def analyze_profile(profile: LearnerProfileRequest) -> LearnerProfileResponse:
         timeline_months=profile.timeline_months,
     )
 
+    learner = Learner(
+        goal=normalized_profile.goal,
+        experience_level=normalized_profile.experience_level.value,
+        skills=normalized_profile.skills,
+        completed_courses=[course.model_dump() for course in normalized_profile.completed_courses],
+        weekly_hours=normalized_profile.weekly_hours,
+        learning_preference=normalized_profile.learning_preference.value,
+        timeline_months=normalized_profile.timeline_months,
+    )
+    db.add(learner)
+    db.commit()
+    db.refresh(learner)
+
     return LearnerProfileResponse(
-        # Temporary until learner profiles are persisted in the future database layer.
-        learner_id=str(uuid4()),
+        learner_id=learner.id,
         profile=normalized_profile,
         message="Learner profile created successfully",
     )

@@ -13,6 +13,10 @@ import {
   Sparkles,
   UserRound,
   X,
+  BookOpen,
+  BriefcaseBusiness,
+  Code2,
+  Network,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,11 +25,16 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", href: "#dashboard", icon: LayoutDashboard },
-  { label: "Learning Path", href: "#how-it-works", icon: Compass },
-  { label: "Skills", href: "#skills", icon: ChartNoAxesColumnIncreasing },
-  { label: "AI Assistant", href: "#ai-assistant", icon: Bot },
-  { label: "Profile", href: "#profile", icon: UserRound },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Roadmap", href: "/roadmap", icon: Compass },
+  { label: "Learn", href: "/learn", icon: BookOpen },
+  { label: "Practice", href: "/practice", icon: Code2 },
+  { label: "Projects", href: "/projects", icon: BriefcaseBusiness },
+  { label: "Skill Graph", href: "/skill-graph", icon: Network },
+  { label: "Career", href: "/career", icon: ChartNoAxesColumnIncreasing },
+  { label: "AI Tutor", href: "/tutor", icon: Bot },
+  { label: "Progress", href: "/progress", icon: ChartNoAxesColumnIncreasing },
+  { label: "Profile", href: "/profile", icon: UserRound },
 ];
 
 export function Navbar() {
@@ -65,7 +74,7 @@ export function Navbar() {
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           <Button asChild className="hidden sm:inline-flex">
-            <Link href="/onboarding">Get Started</Link>
+            <Link href="/dashboard">Open workspace</Link>
           </Button>
         </div>
       </nav>
@@ -81,8 +90,8 @@ export function Navbar() {
               <MobileNavLink key={item.href} item={item} active={index === 0} onClick={() => setOpen(false)} />
             ))}
             <Button asChild className="mt-2 w-full">
-              <Link href="/onboarding" onClick={() => setOpen(false)}>
-                Get Started
+              <Link href="/dashboard" onClick={() => setOpen(false)}>
+                Open workspace
               </Link>
             </Button>
           </div>
@@ -95,7 +104,7 @@ export function Navbar() {
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   const pathname = usePathname();
-  const isActive = active && pathname === "/";
+  const isActive = pathname === item.href || (active && pathname === "/");
 
   return (
     <motion.div whileHover={{ y: -1 }} whileTap={{ y: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}>

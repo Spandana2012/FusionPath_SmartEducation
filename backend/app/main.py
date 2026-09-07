@@ -7,7 +7,10 @@ from app.api.learning_path import router as learning_path_router
 from app.api.profile import router as profile_router
 from app.api.recommendations import router as recommendations_router
 from app.api.skills import router as skills_router
+from app.api.adaptive import router as adaptive_router
 from app.core.config import settings
+from app.core.database import Base, engine
+from app import models  # noqa: F401 - register all SQLAlchemy models before table creation
 
 app = FastAPI(
     title="FusionPath API",
@@ -27,6 +30,14 @@ app.include_router(profile_router)
 app.include_router(skills_router)
 app.include_router(recommendations_router)
 app.include_router(learning_path_router)
+app.include_router(adaptive_router)
+
+
+@app.on_event("startup")
+def create_development_tables() -> None:
+    # Alembic owns production migrations. This keeps a fresh local prototype runnable.
+    if settings.database_url.startswith("sqlite"):
+        Base.metadata.create_all(bind=engine)
 
 
 @app.exception_handler(RequestValidationError)

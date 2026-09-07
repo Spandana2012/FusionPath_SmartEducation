@@ -7,6 +7,7 @@ load_dotenv()
 
 class Settings:
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./fusionpath.db")
 
     @property
     def cors_origins(self) -> list[str]:
