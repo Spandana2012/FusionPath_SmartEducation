@@ -1,86 +1,150 @@
 # FusionPath
 
-FusionPath is a personalized learning platform that helps learners move from their current skills and career goals to a structured learning path. It is the Fusion Solids project for the HCL Amplify 2026 hackathon.
+FusionPath is a personalized learning platform for moving from a learner's current skills and career goal to a practical learning path. It is the Fusion Solids project for the HCL Amplify 2026 hackathon.
 
-## Core Personalization Flow
+## Implemented Now
 
-The existing profile-driven pipeline is the source of truth for every learner-facing experience:
+The existing personalization pipeline remains the source of truth:
 
 ```text
 Profile -> Skill Gap -> Recommendations -> Learning Path
-                                          |
+                                           |
               Practice / Roadmap / Projects / Career / AI Tutor
 ```
 
-The dashboard, Skills, Career, Profile, and My Learning views all read the same persisted learner context. My Learning contains Learning Path, Roadmap, Practice, Projects, and Progress views.
+The current additive phase also includes:
 
-## Core APIs
+- Passwordless email OTP sign-up and sign-in with JWT access tokens and rotated, revoked refresh tokens in an httpOnly cookie.
+- In-database OTP rate limiting, hashed OTP storage, expiry, single-use verification, and optional linking to an existing anonymous learner.
+- Readiness-aware job recommendations from curated SQLite listings for the existing five-role taxonomy.
+- Authenticated domain-based community posts, replies, and basic report flags.
+- A Community route and a Recommended Jobs section added to the existing Career view.
 
-The FastAPI backend exposes the core personalization contracts:
+No external LLM, job-board API, moderation service, SMS provider, or hosted database is required.
 
-- `POST /api/profile/analyze` normalizes a learner profile and creates or updates the learner record.
-- `POST /api/skills/gap` compares the profile with the target role and returns gaps, strengths, priorities, and readiness.
-- `POST /api/recommendations` selects resources for the returned skill gaps.
-- `POST /api/learning-path` turns the profile, gaps, and recommendations into ordered milestones.
+## Existing Product Flow
 
-The adaptive endpoints persist the same learner model and provide the connected tutor, practice evaluation, progress, and context views.
+Landing and onboarding remain available without authentication. Existing anonymous learner persistence continues through localStorage and the existing learner APIs. After onboarding, the learner can use profile analysis, skill-gap analysis, recommendations, learning path, dashboard, roadmap, practice, mistake tracking, skills, career, and AI Tutor.
 
-## Dynamic AI Tutor
+Authenticated users can link the local learner ID during OTP verification. Existing learner columns and endpoint contracts are preserved.
 
-The AI Tutor is a deterministic, context-aware assistant implemented in the application logic. It does not use an external LLM or require an API key.
+## Supported Domains
 
-For each question, it reads the learner's target role, experience, current skills, strengths, skill gaps, critical missing skills, readiness, recommendations, current milestone, full learning path, and persisted progress. Local intent detection supports explanations, relevance questions, next steps, hints, resources, practice guidance, progress, career questions, and general learning questions. Consequently, the same question can produce different guidance for different learners, while different questions from one learner take different response paths.
+The existing backend taxonomy is reused everywhere:
 
-## Dynamic Practice
+- Generative AI Engineer
+- Data Analyst
+- Frontend Developer
+- Backend Developer
+- Cloud/DevOps Engineer
 
-Practice is connected to the current learning-path milestone and highest-priority skill gap. It generates a five-question session for the active skill, selecting topic-specific question templates when the skill is known and a contextual fallback set otherwise. Sessions include conceptual, scenario, application, reasoning, and practical question types where appropriate.
+## API Endpoints
 
-Each question can be submitted independently through the existing adaptive practice API. The learner sees correctness and an explanation, then continues through the set. The final result reports attempted questions, correct answers, score, skill practiced, topics to review from incorrect answers, and a dynamic next action. Practice attempts and mistakes remain part of the persisted learner progress.
+Existing endpoints remain available:
 
-## Connected Product Experience
+- `POST /api/profile/analyze`
+- `POST /api/skills/gap`
+- `POST /api/recommendations`
+- `POST /api/learning-path`
+- `GET /api/adaptive/context/{learner_id}`
+- Existing adaptive state, tutor, practice, progress, graph, and mistake endpoints
 
-- Dashboard: readiness, current focus, path progress, and recommended action.
-- My Learning: Learning Path, Roadmap, Practice, Projects, and Progress.
-- Skills: shared skill-gap analysis and readiness.
-- Career: target role, strengths, critical gaps, and next steps.
-- AI Tutor: contextual guidance grounded in the same learner model.
-- Profile: the persisted learner profile used by the personalization pipeline.
+New endpoints:
 
-These are connected views of one learner model rather than unrelated static pages.
+- `POST /api/auth/otp/request`
+- `POST /api/auth/otp/verify`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `GET /api/jobs/recommendations/{learner_id}`
+- `GET /api/community/domains`
+- `GET /api/community/posts?domain=`
+- `POST /api/community/posts`
+- `GET /api/community/posts/{id}/replies`
+- `POST /api/community/posts/{id}/replies`
+- `POST /api/community/posts/{id}/report`
+- `POST /api/community/replies/{id}/report`
 
-## Technology Stack
+Community reads and writes require a verified access token. Refresh tokens are never returned in JSON or stored in localStorage.
 
-- Next.js 15, React 19, TypeScript, and Tailwind CSS
-- FastAPI, Python 3.11+, Pydantic, SQLAlchemy, and SQLite for the backend prototype
-- REST JSON APIs
-- Vercel-compatible Next.js frontend deployment
+## Database
 
-## Running the Project
+SQLite is used locally and in the existing backend deployment approach. Alembic manages every schema change.
+
+Existing tables remain intact:
+
+- `learners`
+- `roadmap_states`
+- `mistake_events`
+- `practice_attempts`
+- `skill_graph_nodes`
+- `skill_graph_edges`
+
+New additive tables:
+
+- `users`
+- `otp_codes`
+- `refresh_tokens`
+- `job_listings`
+- `community_posts`
+- `community_replies`
+
+The only existing-table change is a nullable `learners.user_id` foreign key. It does not remove or rename any learner column or change anonymous learner behavior.
+
+## Environment Variables
+
+Frontend `.env.local`:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Backend `.env`:
+
+```env
+FRONTEND_URL=http://localhost:3000
+DATABASE_URL=sqlite:///./fusionpath.db
+JWT_SECRET=replace-with-a-long-random-secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_MINUTES=15
+REFRESH_TOKEN_DAYS=30
+COOKIE_SECURE=false
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM_EMAIL=no-reply@example.com
+SMTP_STARTTLS=true
+```
+
+Copy `backend/.env.example` to `backend/.env` and set real values. OTP requests fail with a clear configuration error when SMTP is missing; the application never returns or stores a plaintext OTP. Set `COOKIE_SECURE=true` when serving over HTTPS.
+
+## Local Setup
 
 Prerequisites: Node.js 20+, npm, Python 3.11+, and pip.
 
-Start the backend from the project root:
+From the project root:
 
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-In a second terminal, start the frontend from the project root:
+In a second terminal:
 
 ```powershell
 npm install
 npm run dev
 ```
 
-The frontend runs at `http://localhost:3000`; the backend runs at `http://localhost:8000`. Configure `NEXT_PUBLIC_API_URL` when the frontend needs to use a backend other than the local default. Backend CORS is configured with `FRONTEND_URL`.
+Open `http://localhost:3000`. Use `/onboarding` for the existing anonymous flow, `/sign-up` or `/sign-in` for OTP authentication, and `/community` for the authenticated community.
 
-## Testing and Validation
+## Testing and Migration
 
-Frontend commands:
+Frontend:
 
 ```powershell
 npm run typecheck
@@ -88,15 +152,26 @@ npm run lint
 npm run build
 ```
 
-Backend commands, run from `backend`:
+Backend, from `backend`:
 
 ```powershell
-python -m pytest
 python -m compileall app
+python -m pytest
+alembic upgrade head
 ```
 
-The adaptive-context tests also verify that two different learner profiles receive different skill analysis and tutor responses for the same next-step question.
+The new migration is `20260908_03_auth_jobs_community`. It is additive and supports upgrading both a clean database and the existing development database without deleting learner data. Curated job rows are seeded lazily into SQLite when job recommendations are first requested.
 
-## Deployment
+## Architecture
 
-The frontend can be deployed to Vercel and the FastAPI backend to a Python web-service host such as Render, Railway, or Fly.io. Set `NEXT_PUBLIC_API_URL` to the deployed backend origin and `FRONTEND_URL` to the deployed frontend origin. Do not commit secrets or API keys.
+The Next.js frontend uses the existing app routes, Tailwind design system, API client, local learner store, and learner context provider. Authenticated access tokens live in session storage only; refresh tokens are httpOnly cookies. The FastAPI backend adds auth, jobs, and community routers beside the existing profile, skill, recommendation, learning-path, and adaptive routers. SQLAlchemy models are registered through the existing Alembic metadata.
+
+The job service exposes a provider-shaped `get_job_recommendations` boundary while using SQLite today. A future live provider could replace the seeded provider without changing the frontend response contract.
+
+## Future Extensions
+
+- Replace curated SQLite jobs with an approved live provider while keeping the same job response contract.
+- Add richer moderation workflows beyond the current boolean report flags.
+- Add account settings and explicit profile-link management.
+
+No existing FusionPath feature was intentionally removed or replaced.

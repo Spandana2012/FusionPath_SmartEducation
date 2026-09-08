@@ -13,6 +13,7 @@ import {
   UserRound,
   X,
   Network,
+  UsersRound,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { label: "Skills", href: "/skill-analysis", icon: Network },
   { label: "Career", href: "/career", icon: ChartNoAxesColumnIncreasing },
   { label: "AI Tutor", href: "/tutor", icon: Bot },
+  { label: "Community", href: "/community", icon: UsersRound },
   { label: "Profile", href: "/profile", icon: UserRound },
 ];
 

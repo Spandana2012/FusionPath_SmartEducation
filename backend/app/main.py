@@ -13,6 +13,9 @@ from app.api.profile import router as profile_router
 from app.api.recommendations import router as recommendations_router
 from app.api.skills import router as skills_router
 from app.api.adaptive import router as adaptive_router
+from app.api.auth import router as auth_router
+from app.api.community import router as community_router
+from app.api.jobs import router as jobs_router
 from app.core.config import settings
 from app.core.database import engine
 from app import models  # noqa: F401 - register all SQLAlchemy models for Alembic metadata
@@ -36,6 +39,9 @@ app.include_router(skills_router)
 app.include_router(recommendations_router)
 app.include_router(learning_path_router)
 app.include_router(adaptive_router)
+app.include_router(auth_router)
+app.include_router(jobs_router)
+app.include_router(community_router)
 
 
 @app.on_event("startup")

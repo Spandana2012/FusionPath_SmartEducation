@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { LearningSectionNav } from "@/components/layout/section-nav";
+import { RecommendedJobs } from "@/components/career/recommended-jobs";
 import { useLearnerContext } from "@/components/experience/learner-context-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,13 +26,24 @@ import { askTutor, evaluatePractice } from "@/lib/api/adaptive";
 import { buildPracticeSet, getPracticeFocus } from "@/lib/practice";
 import type { LearnerContext, LearningMilestone, RecommendationItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { hasAccessToken } from "@/lib/api/client";
+import { useRouter } from "next/navigation";
 
 export type WorkspaceView = "dashboard" | "roadmap" | "learn" | "practice" | "projects" | "progress" | "graph" | "career" | "tutor" | "profile";
 
 export function LearningWorkspace({ view }: { view: WorkspaceView }) {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
   const { context, loading, error, refresh } = useLearnerContext();
   const showLearningNav = ["roadmap", "learn", "practice", "projects", "progress"].includes(view);
 
+  useEffect(() => {
+    const hasAnonymousLearner = Boolean(window.localStorage.getItem("fusionpath.learnerId"));
+    if (!hasAccessToken() && !hasAnonymousLearner) router.replace("/sign-in");
+    setAuthChecked(true);
+  }, [router]);
+
+  if (!authChecked) return <WorkspaceLoading showLearningNav={showLearningNav} />;
   if (loading && !context) return <WorkspaceLoading showLearningNav={showLearningNav} />;
   if (!context) return <EmptyLearnerState showLearningNav={showLearningNav} error={error} />;
 
@@ -173,7 +185,7 @@ function Projects({ context }: { context: LearnerContext }) {
 }
 
 function Career({ context }: { context: LearnerContext }) {
-  return <WorkspacePage eyebrow="Career readiness" title={context.skill_gap.target_role} description="Your readiness is the score returned by the shared skill-gap analysis, with next steps grounded in your learning path."><div className="grid gap-5 md:grid-cols-3"><Metric label="Readiness" value={`${context.skill_gap.readiness_score}%`} icon={Gauge} /><Metric label="Readiness label" value={formatLabel(context.skill_gap.readiness_label)} icon={Target} /><Metric label="Milestones" value={`${context.progress.completed_milestones} / ${context.progress.total_milestones}`} icon={Route} /></div><div className="mt-6 grid gap-5 lg:grid-cols-2"><Panel title="Strengths" icon={CheckCircle2}><SkillList items={context.skill_gap.strengths.map((skill) => `${skill.skill} (${skill.current_level}/${skill.required_level})`)} empty="No strengths confirmed yet." /></Panel><Panel title="Critical gaps" icon={CircleAlert}><SkillList items={context.skill_gap.missing_critical_skills} empty="No critical gaps returned." /></Panel></div><Panel title="Recommended next steps" icon={ArrowRight} className="mt-5"><ol className="space-y-3 text-sm text-muted-foreground">{nextSteps(context).map((step, index) => <li key={step} className="flex gap-3"><span className="font-semibold text-accent">{index + 1}.</span>{step}</li>)}</ol></Panel></WorkspacePage>;
+  return <WorkspacePage eyebrow="Career readiness" title={context.skill_gap.target_role} description="Your readiness is the score returned by the shared skill-gap analysis, with next steps grounded in your learning path."><div className="grid gap-5 md:grid-cols-3"><Metric label="Readiness" value={`${context.skill_gap.readiness_score}%`} icon={Gauge} /><Metric label="Readiness label" value={formatLabel(context.skill_gap.readiness_label)} icon={Target} /><Metric label="Milestones" value={`${context.progress.completed_milestones} / ${context.progress.total_milestones}`} icon={Route} /></div><div className="mt-6 grid gap-5 lg:grid-cols-2"><Panel title="Strengths" icon={CheckCircle2}><SkillList items={context.skill_gap.strengths.map((skill) => `${skill.skill} (${skill.current_level}/${skill.required_level})`)} empty="No strengths confirmed yet." /></Panel><Panel title="Critical gaps" icon={CircleAlert}><SkillList items={context.skill_gap.missing_critical_skills} empty="No critical gaps returned." /></Panel></div><Panel title="Recommended next steps" icon={ArrowRight} className="mt-5"><ol className="space-y-3 text-sm text-muted-foreground">{nextSteps(context).map((step, index) => <li key={step} className="flex gap-3"><span className="font-semibold text-accent">{index + 1}.</span>{step}</li>)}</ol></Panel><RecommendedJobs context={context} /></WorkspacePage>;
 }
 
 function Tutor({ context }: { context: LearnerContext }) {

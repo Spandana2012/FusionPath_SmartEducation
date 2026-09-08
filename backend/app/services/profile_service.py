@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models import Learner
+from app.models import Learner, User
 from app.schemas.profile import CompletedCourse, LearnerProfile, LearnerProfileRequest, LearnerProfileResponse
 
 
@@ -20,7 +20,7 @@ ACRONYMS = {
 }
 
 
-def analyze_profile(profile: LearnerProfileRequest, db: Session) -> LearnerProfileResponse:
+def analyze_profile(profile: LearnerProfileRequest, db: Session, user: User | None = None) -> LearnerProfileResponse:
     normalized_profile = LearnerProfile(
         goal=normalize_whitespace(profile.goal),
         experience_level=profile.experience_level,
@@ -32,6 +32,7 @@ def analyze_profile(profile: LearnerProfileRequest, db: Session) -> LearnerProfi
     )
 
     learner = Learner(
+        user_id=user.id if user else None,
         goal=normalized_profile.goal,
         experience_level=normalized_profile.experience_level.value,
         skills=normalized_profile.skills,

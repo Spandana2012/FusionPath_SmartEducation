@@ -94,10 +94,13 @@ export async function apiClient<TResponse>(
   let response: Response;
 
   try {
+    const accessToken = typeof window !== "undefined" ? window.sessionStorage.getItem("fusionpath.accessToken") : null;
     response = await fetch(url, {
       ...init,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...options.headers,
         ...init.headers,
       },
@@ -125,3 +128,15 @@ export async function apiClient<TResponse>(
 }
 
 export { API_URL };
+
+export function setAccessToken(token: string) {
+  if (typeof window !== "undefined") window.sessionStorage.setItem("fusionpath.accessToken", token);
+}
+
+export function clearAccessToken() {
+  if (typeof window !== "undefined") window.sessionStorage.removeItem("fusionpath.accessToken");
+}
+
+export function hasAccessToken() {
+  return typeof window !== "undefined" && Boolean(window.sessionStorage.getItem("fusionpath.accessToken"));
+}
