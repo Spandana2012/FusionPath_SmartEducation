@@ -1,6 +1,8 @@
 # FusionPath
 # Demo: https://fusionpathsmarteducation-r135xucym-rohith-lashettis-projects.vercel.app/
 FusionPath is a personalized learning platform for moving from a learner's current skills and career goal to a practical learning path. It is the Fusion Solids project for the HCL Amplify 2026 hackathon.
+# Video URL: https://drive.google.com/file/d/1L_t0Itv77WzCru9-XPyj9RET_Ew0m-2D/view?usp=sharing
+
 # Note: FusionPath is actively under development. The deployed version represents the current stable build, while additional features, improvements, and refinements are being continuously added.
 
 ## Implemented Now
