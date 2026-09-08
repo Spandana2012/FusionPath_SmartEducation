@@ -9,7 +9,7 @@ import { useLearnerContext } from "@/components/experience/learner-context-provi
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getJobRecommendations, type JobListing } from "@/lib/api/jobs";
-import { hasAccessToken } from "@/lib/api/client";
+import { getCurrentUser, rememberLearner } from "@/lib/api/auth";
 
 export function JobsPage() {
   const router = useRouter();
@@ -20,8 +20,15 @@ export function JobsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasAccessToken()) router.replace("/sign-in");
-    setAuthChecked(true);
+    let active = true;
+    void getCurrentUser().then((auth) => {
+      if (!active) return;
+      rememberLearner(auth.learner_id);
+      setAuthChecked(true);
+    }).catch(() => {
+      if (active) router.replace("/sign-in");
+    });
+    return () => { active = false; };
   }, [router]);
 
   useEffect(() => {

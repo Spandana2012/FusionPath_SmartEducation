@@ -15,7 +15,7 @@ Profile -> Skill Gap -> Recommendations -> Learning Path
 The current additive phase also includes:
 
 - Password authentication with full name, email, phone number, and scrypt-hashed passwords.
-- JWT access tokens and rotated, revoked refresh tokens in an httpOnly cookie, with optional linking to an existing anonymous learner.
+- Server-side SQLite sessions with hashed session tokens in an httpOnly cookie, with optional linking to an existing anonymous learner.
 - Readiness-aware job recommendations from curated SQLite listings for the existing five-role taxonomy.
 - Authenticated domain-based community posts, replies, and basic report flags.
 - A Community route, an authenticated Jobs route, and a Recommended Jobs preview added to the existing Career view.
@@ -53,7 +53,7 @@ New endpoints:
 
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
-- `POST /api/auth/refresh`
+- `GET /api/auth/me`
 - `POST /api/auth/logout`
 - `GET /api/jobs/recommendations/{learner_id}`
 - `GET /api/community/domains`
@@ -64,8 +64,7 @@ New endpoints:
 - `POST /api/community/posts/{id}/report`
 - `POST /api/community/replies/{id}/report`
 
-Community reads and writes require a verified access token. Refresh tokens are never returned in JSON or stored in localStorage.
-Job recommendations also require a verified access token and the requested learner to be linked to that account.
+Community reads and writes require the authenticated SQLite session. Session tokens are never returned in JSON or stored in frontend storage. Job recommendations also require the authenticated session and the requested learner to be linked to that account.
 
 ## Database
 
@@ -83,7 +82,7 @@ Existing tables remain intact:
 New additive tables:
 
 - `users`
-- `refresh_tokens`
+- `sessions`
 - `job_listings`
 - `community_posts`
 - `community_replies`
@@ -103,14 +102,12 @@ Backend `.env`:
 ```env
 FRONTEND_URL=http://localhost:3000
 DATABASE_URL=sqlite:///./fusionpath.db
-JWT_SECRET=replace-with-a-long-random-secret
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_MINUTES=15
-REFRESH_TOKEN_DAYS=30
-COOKIE_SECURE=false
+SESSION_COOKIE_NAME=fusionpath_session
+SESSION_EXPIRE_DAYS=7
+SESSION_COOKIE_SECURE=false
 ```
 
-Copy `backend/.env.example` to `backend/.env` and set a long random `JWT_SECRET`. SMTP is not required. Set `COOKIE_SECURE=true` when serving over HTTPS.
+Copy `backend/.env.example` to `backend/.env`. No JWT secret, SMTP configuration, or email service is required. Set `SESSION_COOKIE_SECURE=true` when serving over HTTPS.
 
 ## Local Setup
 
@@ -154,11 +151,13 @@ python -m pytest
 alembic upgrade head
 ```
 
-The migrations `20260908_03_auth_jobs_community` and `20260909_04_password_auth` are additive and preserve existing users and learner data. Curated job rows are seeded lazily into SQLite when job recommendations are first requested.
+The migrations `20260908_03_auth_jobs_community`, `20260909_04_password_auth`, and `20260909_05_sqlite_sessions` are additive and preserve existing users and learner data. Curated job rows are seeded lazily into SQLite when job recommendations are first requested.
 
 ## Architecture
 
-The Next.js frontend uses the existing app routes, Tailwind design system, API client, local learner store, and learner context provider. Authenticated access tokens live in session storage only; refresh tokens are httpOnly cookies. The FastAPI backend adds auth, jobs, and community routers beside the existing profile, skill, recommendation, learning-path, and adaptive routers. SQLAlchemy models are registered through the existing Alembic metadata.
+The Next.js frontend uses the existing app routes, Tailwind design system, API client, local learner store, and learner context provider. Authentication uses a server-side SQLite session: only the raw session cookie exists in the browser, while the database stores its SHA-256 hash. The FastAPI backend adds auth, jobs, and community routers beside the existing profile, skill, recommendation, learning-path, and adaptive routers. SQLAlchemy models are registered through the existing Alembic metadata.
+
+The authentication relationship is `User -> Session -> Learner -> Domain -> Learning + Jobs + Community`. Passwords use salted `hashlib.scrypt` hashes. There is no OTP, SMTP, SMS, JWT, or external authentication provider.
 
 The job service exposes a provider-shaped `get_job_recommendations` boundary while using SQLite today. It receives the authenticated learner's existing domain and readiness context. Community uses the same learner domain taxonomy for its default feed. A future live job provider could replace the seeded provider without changing the frontend response contract.
 

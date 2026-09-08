@@ -1,26 +1,17 @@
-from fastapi import Depends, Header, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import Cookie, Depends
+from sqlalchemy.orm import Session as DatabaseSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models import User
-from app.services.auth_service import decode_token
+from app.services.auth_service import get_user_for_session
 
 
-def bearer_token(authorization: str | None) -> str:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Authentication is required.")
-    return authorization.split(" ", 1)[1].strip()
+def current_user(session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name), db: DatabaseSession = Depends(get_db)) -> User:
+    return get_user_for_session(db, session_token)
 
 
-def current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
-    payload = decode_token(bearer_token(authorization))
-    user = db.get(User, payload["sub"])
-    if user is None or user.verified_at is None:
-        raise HTTPException(status_code=401, detail="Authentication is required.")
-    return user
-
-
-def optional_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User | None:
-    if not authorization:
+def optional_user(session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name), db: DatabaseSession = Depends(get_db)) -> User | None:
+    if not session_token:
         return None
-    return current_user(authorization, db)
+    return get_user_for_session(db, session_token)

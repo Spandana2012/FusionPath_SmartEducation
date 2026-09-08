@@ -26,7 +26,7 @@ import { askTutor, evaluatePractice } from "@/lib/api/adaptive";
 import { buildPracticeSet, getPracticeFocus } from "@/lib/practice";
 import type { LearnerContext, LearningMilestone, RecommendationItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { hasAccessToken } from "@/lib/api/client";
+import { getCurrentUser, rememberLearner } from "@/lib/api/auth";
 import { useRouter } from "next/navigation";
 
 export type WorkspaceView = "dashboard" | "roadmap" | "learn" | "practice" | "projects" | "progress" | "graph" | "career" | "tutor" | "profile";
@@ -38,9 +38,18 @@ export function LearningWorkspace({ view }: { view: WorkspaceView }) {
   const showLearningNav = ["roadmap", "learn", "practice", "projects", "progress"].includes(view);
 
   useEffect(() => {
-    const hasAnonymousLearner = Boolean(window.localStorage.getItem("fusionpath.learnerId"));
-    if (!hasAccessToken() && !hasAnonymousLearner) router.replace("/sign-in");
-    setAuthChecked(true);
+    let active = true;
+    void getCurrentUser().then((auth) => {
+      if (!active) return;
+      rememberLearner(auth.learner_id);
+      setAuthChecked(true);
+    }).catch(() => {
+      if (!active) return;
+      const hasAnonymousLearner = Boolean(window.localStorage.getItem("fusionpath.learnerId"));
+      if (!hasAnonymousLearner) router.replace("/sign-in");
+      setAuthChecked(true);
+    });
+    return () => { active = false; };
   }, [router]);
 
   if (!authChecked) return <WorkspaceLoading showLearningNav={showLearningNav} />;

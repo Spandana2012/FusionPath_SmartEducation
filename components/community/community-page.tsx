@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { createCommunityPost, createCommunityReply, getCommunityDomains, getCommunityPosts, getCommunityReplies, reportCommunityPost, type CommunityPost, type CommunityReply } from "@/lib/api/community";
-import { hasAccessToken } from "@/lib/api/client";
+import { getCurrentUser, rememberLearner } from "@/lib/api/auth";
 
 export function CommunityPage() {
   const { context } = useLearnerContext();
@@ -26,9 +26,14 @@ export function CommunityPage() {
   const defaultDomain = useMemo(() => context?.skill_gap.target_role ?? readLocalDomain(), [context]);
 
   useEffect(() => {
-    const available = hasAccessToken();
-    setAuthenticated(available);
-    if (available) void getCommunityDomains().then((response) => { setDomains(response.domains); setDomain((current) => current || (response.domains.includes(defaultDomain) ? defaultDomain : response.domains[0] ?? "")); }).catch(() => setError("Community domains could not be loaded."));
+    let active = true;
+    void getCurrentUser().then((auth) => {
+      if (!active) return;
+      rememberLearner(auth.learner_id);
+      setAuthenticated(true);
+      void getCommunityDomains().then((response) => { setDomains(response.domains); setDomain((current) => current || (response.domains.includes(auth.domain ?? defaultDomain) ? (auth.domain ?? defaultDomain) : response.domains[0] ?? "")); }).catch(() => setError("Community domains could not be loaded."));
+    }).catch(() => { if (active) setAuthenticated(false); });
+    return () => { active = false; };
   }, [defaultDomain]);
 
   useEffect(() => {

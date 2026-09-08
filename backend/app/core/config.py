@@ -8,11 +8,9 @@ load_dotenv()
 class Settings:
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./fusionpath.db")
-    jwt_secret: str = os.getenv("JWT_SECRET", "")
-    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
-    access_token_minutes: int = int(os.getenv("ACCESS_TOKEN_MINUTES", "15"))
-    refresh_token_days: int = int(os.getenv("REFRESH_TOKEN_DAYS", "30"))
-    cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").casefold() == "true"
+    session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "fusionpath_session")
+    session_expire_days: int = int(os.getenv("SESSION_EXPIRE_DAYS", "7"))
+    session_cookie_secure: bool = os.getenv("SESSION_COOKIE_SECURE", "false").casefold() == "true"
 
     @property
     def cors_origins(self) -> list[str]:

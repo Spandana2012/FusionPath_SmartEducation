@@ -68,16 +68,7 @@ class AuthUser(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
+    authenticated: bool = True
     user: AuthUser
     learner_id: str | None = None
-
-
-class RefreshResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-    user: AuthUser
-    learner_id: str | None = None
+    domain: str | None = None

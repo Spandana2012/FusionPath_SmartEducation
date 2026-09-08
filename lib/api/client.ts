@@ -59,6 +59,7 @@ function buildApiUrl(path: string) {
 
 function errorKindForStatus(status: number): ApiErrorKind {
   if (status === 400) return "bad_request";
+  if (status === 401 || status === 409) return "bad_request";
   if (status === 422) return "validation";
   if (status === 404) return "not_found";
   if (status >= 500) return "server";
@@ -66,8 +67,10 @@ function errorKindForStatus(status: number): ApiErrorKind {
 }
 
 function messageForStatus(status: number) {
+  if (status === 401) return "Invalid email or password.";
+  if (status === 409) return "An account with this email already exists.";
   if (status === 400) return "FusionPath could not process that request.";
-  if (status === 422) return "FusionPath needs a little more information before continuing.";
+  if (status === 422) return "Please check the information entered.";
   if (status === 404) return "FusionPath could not find that backend endpoint.";
   if (status >= 500) return "FusionPath hit a temporary backend issue.";
   return "FusionPath could not complete that request.";
@@ -94,13 +97,11 @@ export async function apiClient<TResponse>(
   let response: Response;
 
   try {
-    const accessToken = typeof window !== "undefined" ? window.sessionStorage.getItem("fusionpath.accessToken") : null;
     response = await fetch(url, {
       ...init,
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...options.headers,
         ...init.headers,
       },
@@ -128,15 +129,3 @@ export async function apiClient<TResponse>(
 }
 
 export { API_URL };
-
-export function setAccessToken(token: string) {
-  if (typeof window !== "undefined") window.sessionStorage.setItem("fusionpath.accessToken", token);
-}
-
-export function clearAccessToken() {
-  if (typeof window !== "undefined") window.sessionStorage.removeItem("fusionpath.accessToken");
-}
-
-export function hasAccessToken() {
-  return typeof window !== "undefined" && Boolean(window.sessionStorage.getItem("fusionpath.accessToken"));
-}
