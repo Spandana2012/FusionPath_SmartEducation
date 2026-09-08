@@ -48,3 +48,38 @@ def test_context_returns_not_found_for_unknown_learner() -> None:
     response = client.get("/api/adaptive/context/not-a-real-learner")
 
     assert response.status_code == 404
+
+
+def test_tutor_changes_with_learner_context_and_question_intent() -> None:
+    analyst = client.post("/api/profile/analyze", json=profile("Data Analyst", ["Excel"])).json()
+    frontend = client.post("/api/profile/analyze", json=profile("Frontend Developer", ["HTML", "CSS"])).json()
+
+    analyst_next = client.post("/api/adaptive/tutor/chat", json={"learner_id": analyst["learner_id"], "message": "What should I learn next?"})
+    frontend_next = client.post("/api/adaptive/tutor/chat", json={"learner_id": frontend["learner_id"], "message": "What should I learn next?"})
+    analyst_hint = client.post("/api/adaptive/tutor/chat", json={"learner_id": analyst["learner_id"], "message": "Give me a hint"})
+
+    assert analyst_next.status_code == frontend_next.status_code == analyst_hint.status_code == 200
+    assert analyst_next.json()["message"] != frontend_next.json()["message"]
+    assert analyst_next.json()["intent"] == "next"
+    assert analyst_hint.json()["intent"] == "hint"
+    assert analyst_next.json()["message"] != analyst_hint.json()["message"]
+
+
+def test_tutor_routes_common_learning_intents() -> None:
+    learner = client.post("/api/profile/analyze", json=profile("Data Analyst", ["Excel"])).json()
+    questions = {
+        "explanation": "What is this concept?",
+        "why": "Why should I learn this?",
+        "resource": "What resource should I use?",
+        "practice": "How should I practice this?",
+        "progress": "How am I doing?",
+        "career": "How does this help my career?",
+    }
+
+    responses = {
+        expected: client.post("/api/adaptive/tutor/chat", json={"learner_id": learner["learner_id"], "message": question}).json()
+        for expected, question in questions.items()
+    }
+
+    assert {body["intent"] for body in responses.values()} == set(questions)
+    assert len({body["message"] for body in responses.values()}) == len(questions)

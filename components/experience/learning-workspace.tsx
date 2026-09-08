@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { askTutor, evaluatePractice } from "@/lib/api/adaptive";
+import { buildPracticeSet, getPracticeFocus } from "@/lib/practice";
 import type { LearnerContext, LearningMilestone, RecommendationItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -95,20 +96,35 @@ function Roadmap({ context }: { context: LearnerContext }) {
 }
 
 function Practice({ context, onRefresh }: { context: LearnerContext; onRefresh: () => Promise<void> }) {
-  const gap = context.skill_gap.skill_gaps[0];
+  const questions = useMemo(() => buildPracticeSet(context), [context]);
+  const focus = getPracticeFocus(context);
+  const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [sessionComplete, setSessionComplete] = useState(false);
+  const [results, setResults] = useState<Record<string, boolean>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const correctAnswer = gap ? `Complete the current ${gap.skill} milestone` : "Review the learning path";
-  const options = gap ? [correctAnswer, `Skip ${gap.skill} and start an unrelated topic`] : [correctAnswer];
+  const question = questions[questionIndex];
+
+  useEffect(() => {
+    setQuestionIndex(0);
+    setSelected("");
+    setSubmitted(false);
+    setSessionComplete(false);
+    setResults({});
+    setFeedback(null);
+  }, [context.learner_id, focus.milestone?.id, focus.skill]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!gap || !selected) return;
+    if (!question || !selected || submitted) return;
     setSubmitting(true);
     try {
-      const result = await evaluatePractice({ learner_id: context.learner_id, skill: gap.skill, question_id: `priority-${gap.skill}`, selected_answer: selected, correct_answer: correctAnswer });
-      setFeedback(result.feedback);
+      const result = await evaluatePractice({ learner_id: context.learner_id, skill: question.skill, question_id: question.id, selected_answer: selected, correct_answer: question.correctAnswer });
+      setResults((current) => ({ ...current, [question.id]: result.correct }));
+      setFeedback(`${result.correct ? "Correct." : "Not quite."} ${question.explanation}`);
+      setSubmitted(true);
       await onRefresh();
     } catch {
       setFeedback("Practice could not be recorded. Check that the backend is running and try again.");
@@ -117,7 +133,38 @@ function Practice({ context, onRefresh }: { context: LearnerContext; onRefresh: 
     }
   }
 
-  return <WorkspacePage eyebrow="My learning / practice" title={gap ? `Practice ${gap.skill}` : "Practice from your learning path"} description={gap ? `This exercise is tied to your highest-priority skill gap for ${context.skill_gap.target_role}.` : "Complete upstream analysis before starting practice."}>{gap ? <form onSubmit={submit} className="surface-panel max-w-3xl p-6"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Question 1</p><h2 className="mt-3 text-xl font-semibold text-foreground">Which action best supports your next step?</h2><div className="mt-5 space-y-3">{options.map((option) => <label key={option} className={cn("flex cursor-pointer items-start gap-3 rounded-md border p-4 text-sm", selected === option ? "border-primary bg-primary/5" : "border-border")}><input type="radio" name="practice-answer" value={option} checked={selected === option} onChange={() => setSelected(option)} className="mt-1" />{option}</label>)}</div><Button type="submit" className="mt-5" disabled={!selected || submitting}>{submitting ? "Recording..." : "Submit answer"}<ArrowRight className="h-4 w-4" /></Button>{feedback ? <p className="mt-4 rounded-md bg-secondary p-4 text-sm text-foreground" role="status">{feedback}</p> : null}</form> : <EmptyPanel title="Practice will appear after skill-gap analysis" actionHref="/onboarding" actionLabel="Complete onboarding" />}</WorkspacePage>;
+  function nextQuestion() {
+    if (questionIndex === questions.length - 1) {
+      setSessionComplete(true);
+      return;
+    }
+    setQuestionIndex((current) => current + 1);
+    setSelected("");
+    setSubmitted(false);
+    setFeedback(null);
+  }
+
+  function restart() {
+    setQuestionIndex(0);
+    setSelected("");
+    setSubmitted(false);
+    setSessionComplete(false);
+    setResults({});
+    setFeedback(null);
+  }
+
+  const attempted = Object.keys(results).length;
+  const correct = Object.values(results).filter(Boolean).length;
+  const reviewTopics = questions.filter((item) => results[item.id] === false).map((item) => item.topic);
+  const nextAction = correct / questions.length < 0.6
+    ? `Review ${focus.skill} with the ${focus.milestone?.title ?? "current milestone"} resources before trying another set.`
+    : focus.milestone
+      ? `Continue the ${focus.milestone.title} milestone, then practice its next skill.`
+      : `Keep applying ${focus.skill} in a small task for ${focus.role}.`;
+
+  return <WorkspacePage eyebrow="My learning / practice" title={`Practice ${focus.skill}`} description={`A ${questions.length}-question session connected to ${focus.milestone?.title ?? "your current learning path"} for ${focus.role}.`}>
+    {sessionComplete ? <section className="surface-panel max-w-3xl p-6"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Practice complete</p><h2 className="mt-3 text-2xl font-semibold text-foreground">{correct} / {questions.length} correct</h2><div className="mt-5 grid gap-4 sm:grid-cols-3"><Metric label="Attempted" value={`${attempted} / ${questions.length}`} icon={CheckCircle2} /><Metric label="Score" value={`${Math.round((correct / questions.length) * 100)}%`} icon={Gauge} /><Metric label="Skill practiced" value={focus.skill} icon={Target} /></div><div className="mt-6 grid gap-5 md:grid-cols-2"><Panel title="What to review" icon={CircleAlert}>{reviewTopics.length ? <SkillList items={[...new Set(reviewTopics)]} empty="No review topics needed." /> : <p className="text-sm text-muted-foreground">You answered every question correctly. Keep the skill active with an applied task.</p>}</Panel><Panel title="Next action" icon={ArrowRight}><p className="text-sm leading-6 text-muted-foreground">{nextAction}</p></Panel></div><Button type="button" variant="outline" className="mt-6" onClick={restart}>Try another session <ArrowRight className="h-4 w-4" /></Button></section> : question ? <form onSubmit={submit} className="surface-panel max-w-3xl p-6"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Question {questionIndex + 1} of {questions.length}</p><Badge variant="outline">{question.type} / {question.difficulty}</Badge></div><p className="mt-2 text-xs text-muted-foreground">Topic: {question.topic}</p><h2 className="mt-3 text-xl font-semibold leading-8 text-foreground">{question.question}</h2><div className="mt-5 space-y-3">{question.options.map((option) => <label key={option} className={cn("flex cursor-pointer items-start gap-3 rounded-md border p-4 text-sm", selected === option ? "border-primary bg-primary/5" : "border-border", submitted ? "cursor-default" : "")}><input type="radio" name={`practice-answer-${question.id}`} value={option} checked={selected === option} onChange={() => setSelected(option)} disabled={submitted} className="mt-1" />{option}</label>)}</div>{feedback ? <p className="mt-4 rounded-md bg-secondary p-4 text-sm leading-6 text-foreground" role="status">{feedback}</p> : null}<div className="flex flex-wrap gap-3"><Button type="submit" className="mt-5" disabled={!selected || submitting || submitted}>{submitting ? "Recording..." : "Submit answer"}<CheckCircle2 className="h-4 w-4" /></Button>{submitted ? <Button type="button" variant="outline" className="mt-5" onClick={nextQuestion}>{questionIndex === questions.length - 1 ? "See result" : "Next question"}<ArrowRight className="h-4 w-4" /></Button> : null}</div></form> : <EmptyPanel title="Practice will appear after skill-gap analysis" actionHref="/onboarding" actionLabel="Complete onboarding" />}
+  </WorkspacePage>;
 }
 
 function Projects({ context }: { context: LearnerContext }) {
@@ -132,7 +179,9 @@ function Career({ context }: { context: LearnerContext }) {
 function Tutor({ context }: { context: LearnerContext }) {
   const [messages, setMessages] = useState<Array<{ role: "tutor" | "you"; text: string }>>([]);
   const [input, setInput] = useState("");
-  const concept = context.skill_gap.skill_gaps[0]?.skill ?? context.learning_path.path.milestones[0]?.title ?? context.skill_gap.target_role;
+  const focus = getPracticeFocus(context);
+  const concept = focus.skill;
+  const milestone = focus.milestone?.title ?? context.progress.current_milestone ?? "Current learning path";
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -147,7 +196,7 @@ function Tutor({ context }: { context: LearnerContext }) {
     }
   }
 
-  return <WorkspacePage eyebrow="AI Tutor" title={`Tutor for ${context.skill_gap.target_role}`} description="This deterministic tutor is grounded in your current profile, skill gaps, and learning path. No external model is required."><section className="surface-panel max-w-3xl p-5"><div className="flex items-start gap-3 border-b border-border pb-4"><MessageCircle className="mt-1 h-5 w-5 text-accent" /><div><p className="font-semibold text-foreground">Current focus: {concept}</p><p className="mt-1 text-sm text-muted-foreground">{context.progress.current_milestone ?? "Review your completed path and choose a new focus."}</p></div></div><div className="min-h-56 space-y-3 py-5">{messages.length ? messages.map((message, index) => <p key={`${message.role}-${index}`} className={cn("max-w-[85%] rounded-md p-3 text-sm leading-6", message.role === "you" ? "ml-auto bg-primary text-primary-foreground" : "bg-secondary text-foreground")}>{message.text}</p>) : <p className="text-sm text-muted-foreground">Ask why a resource was recommended, what to learn next, or why {concept} matters for your target role.</p>}</div><div className="flex flex-wrap gap-2 border-t border-border pt-4">{[`Why ${concept}?`, "What should I learn next?", "Give me a hint"].map((prompt) => <Button key={prompt} type="button" variant="outline" size="sm" onClick={() => void send(prompt)}>{prompt}</Button>)}</div><form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input value={input} onChange={(event) => setInput(event.target.value)} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm" placeholder="Ask about your path" aria-label="Ask the AI tutor" /><Button type="submit" size="icon" aria-label="Send question"><Send className="h-4 w-4" /></Button></form></section></WorkspacePage>;
+  return <WorkspacePage eyebrow="AI Tutor" title={`Tutor for ${context.skill_gap.target_role}`} description="This context-aware tutor is grounded in your persisted profile, skill gaps, recommendations, and learning path. No external model is required."><section className="surface-panel max-w-3xl p-5"><div className="grid gap-4 border-b border-border pb-4 sm:grid-cols-3"><div className="flex items-start gap-3 sm:col-span-3"><MessageCircle className="mt-1 h-5 w-5 text-accent" /><div><p className="font-semibold text-foreground">Current focus: {concept}</p><p className="mt-1 text-sm text-muted-foreground">The answers below use your actual milestone, readiness, and recommendations.</p></div></div><Detail label="Milestone" value={milestone} /><Detail label="Goal" value={context.skill_gap.target_role} /><Detail label="Readiness" value={`${context.skill_gap.readiness_score}% · ${formatLabel(context.skill_gap.readiness_label)}`} /></div><div className="min-h-56 space-y-3 py-5">{messages.length ? messages.map((message, index) => <p key={`${message.role}-${index}`} className={cn("max-w-[85%] rounded-md p-3 text-sm leading-6", message.role === "you" ? "ml-auto bg-primary text-primary-foreground" : "bg-secondary text-foreground")}>{message.text}</p>) : <p className="text-sm text-muted-foreground">Ask for an explanation, a next step, a resource, a hint, or practice guidance for {concept}.</p>}</div><div className="flex flex-wrap gap-2 border-t border-border pt-4">{[`Why ${concept}?`, "What should I learn next?", "Give me a hint", "How should I practice this?"].map((prompt) => <Button key={prompt} type="button" variant="outline" size="sm" onClick={() => void send(prompt)}>{prompt}</Button>)}</div><form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input value={input} onChange={(event) => setInput(event.target.value)} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm" placeholder="Ask about your path" aria-label="Ask the AI tutor" /><Button type="submit" size="icon" aria-label="Send question"><Send className="h-4 w-4" /></Button></form></section></WorkspacePage>;
 }
 
 function Profile({ context }: { context: LearnerContext }) {

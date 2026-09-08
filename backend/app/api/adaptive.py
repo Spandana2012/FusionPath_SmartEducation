@@ -13,6 +13,7 @@ from app.models import Learner, MistakeEvent, PracticeAttempt, SkillGraphEdge, S
 from app.schemas.adaptive import BootstrapRequest, LearnerContextResponse, LearnerStatePayload, StateResponse
 from app.services.adaptive_persistence_service import create_demo_learner, current_state, save_initial_state, save_state
 from app.services.learner_context_service import get_learner_context
+from app.services.tutor_service import generate_tutor_response
 
 router = APIRouter(prefix="/api/adaptive", tags=["Adaptive learning"])
 
@@ -86,22 +87,18 @@ def put_state(learner_id: str, payload: LearnerStatePayload, db: Session = Depen
 @router.post("/tutor/chat")
 def tutor_chat(payload: TutorRequest, db: Session = Depends(get_db)) -> dict:
     learner = require_learner(db, payload.learner_id)
-    message = payload.message.casefold()
-    concept = payload.concept or learner.goal
-    if "hint" in message or "stuck" in message:
-        response, intent = f"Break {concept} into one small idea, then explain where it supports your {learner.goal} goal.", "hint"
-    elif "example" in message:
-        response, intent = f"Use a small {concept} example: name the input, the decision or transformation, and the result you expect.", "example"
-    else:
-        response, intent = f"Before we answer, what does {concept} do, and why does it matter for becoming a {learner.goal}?", "socratic_question"
-    return {"message": response, "intent": intent, "concept": concept, "next_action": "practice", "difficulty": "medium"}
+    context = get_learner_context(db, learner)
+    return generate_tutor_response(payload.message, context)
 
 
 @router.post("/tutor/hint")
 def tutor_hint(payload: TutorRequest, db: Session = Depends(get_db)) -> dict:
     learner = require_learner(db, payload.learner_id)
-    concept = payload.concept or learner.goal
-    return {"message": f"Define {concept} in one sentence, then connect it to the next step in your {learner.goal} learning path.", "intent": "hint", "concept": concept, "next_action": "retry", "difficulty": "medium"}
+    context = get_learner_context(db, learner)
+    response = generate_tutor_response(payload.message or "Give me a hint", context)
+    response["intent"] = "hint"
+    response["next_action"] = "retry"
+    return response
 
 
 @router.post("/practice/evaluate")

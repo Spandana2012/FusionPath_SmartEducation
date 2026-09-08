@@ -1,120 +1,65 @@
 # FusionPath
 
-FusionPath is a personalized learning path platform built for the HCL Amplified 2026 hackathon. It turns a learner's career goal, current skills, learning history, weekly availability, and learning preferences into a guided career roadmap.
+FusionPath is a personalized learning platform that helps learners move from their current skills and career goals to a structured learning path. It is the Fusion Solids project for the HCL Amplify 2026 hackathon.
 
-The product flow is:
+## Core Personalization Flow
 
-1. Build a learner profile from onboarding.
-2. Analyze skill gaps against the target role.
-3. Recommend learning resources for those gaps.
-4. Generate a personalized milestone-based learning path.
-
-## Tech Stack
-
-- Frontend: Next.js 15, React 19, TypeScript, Tailwind CSS
-- Backend: FastAPI, Python 3.11+
-- API style: REST JSON
-- State persistence: browser localStorage for the hackathon prototype flow
-
-## Project Structure
+The existing profile-driven pipeline is the source of truth for every learner-facing experience:
 
 ```text
-.
-├── app/                    # Next.js app routes
-├── components/             # UI, layout, landing, onboarding components
-├── hooks/                  # Shared React hooks
-├── lib/
-│   ├── api/                # Frontend API client wrappers
-│   ├── types/              # Shared TypeScript types
-│   └── utils.ts
-├── backend/
-│   ├── app/
-│   │   ├── api/            # FastAPI route modules
-│   │   ├── schemas/        # Pydantic request/response schemas
-│   │   ├── services/       # Business logic
-│   │   ├── knowledge/      # Local role/resource knowledge
-│   │   └── main.py         # FastAPI app entrypoint
-│   ├── tests/              # Backend tests
-│   └── requirements.txt
-└── package.json
+Profile -> Skill Gap -> Recommendations -> Learning Path
+                                          |
+              Practice / Roadmap / Projects / Career / AI Tutor
 ```
 
-## Features
+The dashboard, Skills, Career, Profile, and My Learning views all read the same persisted learner context. My Learning contains Learning Path, Roadmap, Practice, Projects, and Progress views.
 
-- Neon landing page and guided onboarding flow
-- Learner profile normalization
-- Skill gap analysis with readiness score
-- Personalized learning resource recommendations
-- Learning path generation with milestones, reasoning, assessments, and completion criteria
-- Full-page premium loading states for analysis, recommendations, and path generation
+## Core APIs
 
-## API Endpoints
+The FastAPI backend exposes the core personalization contracts:
 
-Backend base URL for local development:
+- `POST /api/profile/analyze` normalizes a learner profile and creates or updates the learner record.
+- `POST /api/skills/gap` compares the profile with the target role and returns gaps, strengths, priorities, and readiness.
+- `POST /api/recommendations` selects resources for the returned skill gaps.
+- `POST /api/learning-path` turns the profile, gaps, and recommendations into ordered milestones.
 
-```text
-http://localhost:8000
-```
+The adaptive endpoints persist the same learner model and provide the connected tutor, practice evaluation, progress, and context views.
 
-Available endpoints:
+## Dynamic AI Tutor
 
-- `GET /health`
-- `POST /api/profile/analyze`
-- `POST /api/skills/gap`
-- `POST /api/recommendations`
-- `POST /api/learning-path`
+The AI Tutor is a deterministic, context-aware assistant implemented in the application logic. It does not use an external LLM or require an API key.
 
-## Prerequisites
+For each question, it reads the learner's target role, experience, current skills, strengths, skill gaps, critical missing skills, readiness, recommendations, current milestone, full learning path, and persisted progress. Local intent detection supports explanations, relevance questions, next steps, hints, resources, practice guidance, progress, career questions, and general learning questions. Consequently, the same question can produce different guidance for different learners, while different questions from one learner take different response paths.
 
-- Node.js 20+
-- npm
-- Python 3.11+
-- pip
+## Dynamic Practice
 
-## Environment Variables
+Practice is connected to the current learning-path milestone and highest-priority skill gap. It generates a five-question session for the active skill, selecting topic-specific question templates when the skill is known and a contextual fallback set otherwise. Sessions include conceptual, scenario, application, reasoning, and practical question types where appropriate.
 
-Create the frontend environment file:
+Each question can be submitted independently through the existing adaptive practice API. The learner sees correctness and an explanation, then continues through the set. The final result reports attempted questions, correct answers, score, skill practiced, topics to review from incorrect answers, and a dynamic next action. Practice attempts and mistakes remain part of the persisted learner progress.
 
-```powershell
-copy .env.example .env.local
-```
+## Connected Product Experience
 
-Expected frontend value:
+- Dashboard: readiness, current focus, path progress, and recommended action.
+- My Learning: Learning Path, Roadmap, Practice, Projects, and Progress.
+- Skills: shared skill-gap analysis and readiness.
+- Career: target role, strengths, critical gaps, and next steps.
+- AI Tutor: contextual guidance grounded in the same learner model.
+- Profile: the persisted learner profile used by the personalization pipeline.
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+These are connected views of one learner model rather than unrelated static pages.
 
-For Vercel production, set `NEXT_PUBLIC_API_URL` to the separate deployed FastAPI backend origin:
+## Technology Stack
 
-```env
-NEXT_PUBLIC_API_URL=https://your-backend-domain
-```
+- Next.js 15, React 19, TypeScript, and Tailwind CSS
+- FastAPI, Python 3.11+, Pydantic, SQLAlchemy, and SQLite for the backend prototype
+- REST JSON APIs
+- Vercel-compatible Next.js frontend deployment
 
-Do not set this to the Vercel frontend URL. Frontend API wrappers compose requests through `lib/api/client.ts`, for example `NEXT_PUBLIC_API_URL + /api/profile/analyze`, so the browser calls the FastAPI service directly.
+## Running the Project
 
-Create the backend environment file:
+Prerequisites: Node.js 20+, npm, Python 3.11+, and pip.
 
-```powershell
-cd backend
-copy .env.example .env
-```
-
-Expected backend value:
-
-```env
-FRONTEND_URL=http://localhost:3000
-```
-
-For production backend hosting, set `FRONTEND_URL` to the deployed Vercel frontend origin:
-
-```env
-FRONTEND_URL=https://your-frontend-domain.vercel.app
-```
-
-## Run the Backend
-
-From the project root:
+Start the backend from the project root:
 
 ```powershell
 cd backend
@@ -124,135 +69,34 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend health check:
-
-```text
-http://localhost:8000/health
-```
-
-## Run the Frontend
-
-Open a second terminal from the project root:
+In a second terminal, start the frontend from the project root:
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Frontend URL:
+The frontend runs at `http://localhost:3000`; the backend runs at `http://localhost:8000`. Configure `NEXT_PUBLIC_API_URL` when the frontend needs to use a backend other than the local default. Backend CORS is configured with `FRONTEND_URL`.
 
-```text
-http://localhost:3000
-```
+## Testing and Validation
 
-## Test and Build
-
-Frontend typecheck:
+Frontend commands:
 
 ```powershell
 npm run typecheck
-```
-
-Frontend production build:
-
-```powershell
+npm run lint
 npm run build
 ```
 
-Backend tests:
+Backend commands, run from `backend`:
 
 ```powershell
-cd backend
-.\.venv\Scripts\activate
-pytest
+python -m pytest
+python -m compileall app
 ```
+
+The adaptive-context tests also verify that two different learner profiles receive different skill analysis and tutor responses for the same next-step question.
 
 ## Deployment
 
-### Architecture
-
-- Frontend: Next.js on Vercel
-- Backend: FastAPI on a separate Python backend host
-- Communication: HTTPS REST API from the browser to the FastAPI backend
-
-Local URLs:
-
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-
-Production URLs:
-
-- Frontend: `https://YOUR-VERCEL-DOMAIN`
-- Backend: `https://YOUR-BACKEND-DOMAIN`
-
-Environment variables:
-
-- Frontend: `NEXT_PUBLIC_API_URL`
-- Backend: `FRONTEND_URL`
-
-Do not commit real secrets, private deployment URLs, or API keys.
-
-Recommended split deployment:
-
-- Frontend: Vercel
-- Backend: Render, Railway, Fly.io, or another Python web service host
-
-### Backend Deployment
-
-Deploy the `backend` folder as a Python web service.
-
-Root directory:
-
-```text
-backend
-```
-
-Build command:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start command:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Set this backend environment variable after the frontend is deployed:
-
-```env
-FRONTEND_URL=https://YOUR-VERCEL-DOMAIN
-```
-
-Verify the deployed backend before connecting Vercel:
-
-```text
-GET https://YOUR-BACKEND-DOMAIN/
-GET https://YOUR-BACKEND-DOMAIN/health
-GET https://YOUR-BACKEND-DOMAIN/docs
-```
-
-### Frontend Deployment
-
-Deploy the repository root as a Next.js app.
-
-Build command:
-
-```bash
-npm run build
-```
-
-Set this frontend environment variable:
-
-```env
-NEXT_PUBLIC_API_URL=https://YOUR-BACKEND-DOMAIN
-```
-
-In Vercel, add `NEXT_PUBLIC_API_URL` under Project Settings, then redeploy so Next.js bakes the public variable into the production build. After both services are live, update the backend `FRONTEND_URL` to the final frontend domain so CORS allows browser requests.
-
-## Notes
-
-- `.env.local`, backend `.env`, `node_modules`, `.next`, and Python cache files are ignored by Git.
-- The frontend uses `lib/api/client.ts` for API calls. React pages should not hardcode backend URLs.
-- The prototype stores successful profile, skill gap, recommendation, and learning path responses in localStorage so users can navigate between screens without repeating onboarding.
+The frontend can be deployed to Vercel and the FastAPI backend to a Python web-service host such as Render, Railway, or Fly.io. Set `NEXT_PUBLIC_API_URL` to the deployed backend origin and `FRONTEND_URL` to the deployed frontend origin. Do not commit secrets or API keys.
