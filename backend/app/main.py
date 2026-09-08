@@ -3,6 +3,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -95,10 +96,10 @@ migrate_development_database()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
-    errors = exc.errors()
-    if any(error.get("loc") == ("body", "goal") and error.get("type") == "missing" for error in errors):
+    raw_errors = exc.errors()
+    if any(error.get("loc") == ("body", "goal") and error.get("type") == "missing" for error in raw_errors):
         return JSONResponse(status_code=422, content={"detail": "Goal is required."})
-    return JSONResponse(status_code=422, content={"detail": errors})
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(raw_errors)})
 
 
 @app.get("/health")

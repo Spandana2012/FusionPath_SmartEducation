@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import current_user
 from app.core.database import get_db
-from app.models import CommunityPost, CommunityReply, User
+from app.models import CommunityPost, CommunityReply, Learner, User
 from app.schemas.community import CommunityPostCreate, CommunityPostResponse, CommunityReplyCreate, CommunityReplyResponse
 from app.services.community_service import SUPPORTED_DOMAINS, post_rows, validate_domain
+from app.services.skill_gap_service import match_role
 
 router = APIRouter(prefix="/api/community", tags=["Community"])
 
@@ -17,7 +18,10 @@ def domains() -> dict[str, tuple[str, ...]]:
 
 
 @router.get("/posts", response_model=list[CommunityPostResponse])
-def list_posts(domain: str | None = Query(default=None), db: Session = Depends(get_db), _: User = Depends(current_user)) -> list[CommunityPostResponse]:
+def list_posts(domain: str | None = Query(default=None), db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[CommunityPostResponse]:
+    if domain is None:
+        learner = db.scalar(select(Learner).where(Learner.user_id == user.id).order_by(Learner.created_at.desc()))
+        domain = match_role(learner.goal).role if learner else None
     return [CommunityPostResponse(id=post.id, author_user_id=post.author_user_id, domain=post.domain, content=post.content, created_at=post.created_at, reported=post.reported, replies_count=count) for post, count in post_rows(db, domain)]
 
 

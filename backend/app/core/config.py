@@ -13,12 +13,6 @@ class Settings:
     access_token_minutes: int = int(os.getenv("ACCESS_TOKEN_MINUTES", "15"))
     refresh_token_days: int = int(os.getenv("REFRESH_TOKEN_DAYS", "30"))
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").casefold() == "true"
-    smtp_host: str = os.getenv("SMTP_HOST", "")
-    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
-    smtp_username: str = os.getenv("SMTP_USERNAME", "")
-    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
-    smtp_from_email: str = os.getenv("SMTP_FROM_EMAIL", "")
-    smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", os.getenv("SMTP_STARTTLS", "true")).casefold() == "true"
 
     @property
     def cors_origins(self) -> list[str]:

@@ -14,8 +14,8 @@ Profile -> Skill Gap -> Recommendations -> Learning Path
 
 The current additive phase also includes:
 
-- Passwordless email OTP sign-up and sign-in with JWT access tokens and rotated, revoked refresh tokens in an httpOnly cookie.
-- In-database OTP rate limiting, hashed OTP storage, expiry, single-use verification, and optional linking to an existing anonymous learner.
+- Password authentication with full name, email, phone number, and scrypt-hashed passwords.
+- JWT access tokens and rotated, revoked refresh tokens in an httpOnly cookie, with optional linking to an existing anonymous learner.
 - Readiness-aware job recommendations from curated SQLite listings for the existing five-role taxonomy.
 - Authenticated domain-based community posts, replies, and basic report flags.
 - A Community route, an authenticated Jobs route, and a Recommended Jobs preview added to the existing Career view.
@@ -26,7 +26,7 @@ No external LLM, job-board API, moderation service, SMS provider, or hosted data
 
 Landing and onboarding remain available without authentication. Existing anonymous learner persistence continues through localStorage and the existing learner APIs. After onboarding, the learner can use profile analysis, skill-gap analysis, recommendations, learning path, dashboard, roadmap, practice, mistake tracking, skills, career, and AI Tutor.
 
-Authenticated users can link the local learner ID during OTP verification. Existing learner columns and endpoint contracts are preserved.
+Authenticated users can link the local learner ID during signup or login. Existing learner columns and endpoint contracts are preserved.
 
 ## Supported Domains
 
@@ -51,8 +51,8 @@ Existing endpoints remain available:
 
 New endpoints:
 
-- `POST /api/auth/otp/request`
-- `POST /api/auth/otp/verify`
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `GET /api/jobs/recommendations/{learner_id}`
@@ -83,13 +83,12 @@ Existing tables remain intact:
 New additive tables:
 
 - `users`
-- `otp_codes`
 - `refresh_tokens`
 - `job_listings`
 - `community_posts`
 - `community_replies`
 
-The only existing-table change is a nullable `learners.user_id` foreign key. It does not remove or rename any learner column or change anonymous learner behavior.
+The existing `users` table receives nullable `name`, `phone`, and `password_hash` fields through an additive migration. The legacy `otp_codes` table is retained for migration safety but is no longer used. The existing `learners.user_id` foreign key remains nullable and does not change anonymous learner behavior.
 
 ## Environment Variables
 
@@ -109,15 +108,9 @@ JWT_ALGORITHM=HS256
 ACCESS_TOKEN_MINUTES=15
 REFRESH_TOKEN_DAYS=30
 COOKIE_SECURE=false
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USERNAME=your-smtp-user
-SMTP_PASSWORD=your-smtp-password
-SMTP_FROM_EMAIL=no-reply@example.com
-SMTP_USE_TLS=true
 ```
 
-Copy `backend/.env.example` to `backend/.env` and set real values. `SMTP_HOST` and `SMTP_FROM_EMAIL` are required. Set both `SMTP_USERNAME` and `SMTP_PASSWORD` for authenticated SMTP, or leave both blank when the SMTP server permits unauthenticated sending. `SMTP_USE_TLS=true` enables STARTTLS. Gmail users should use an App Password where supported, never their normal account password. OTP requests fail safely when SMTP is missing; the frontend shows a generic availability message while detailed configuration errors stay in server logs. The application never returns or stores a plaintext OTP. Set `COOKIE_SECURE=true` when serving over HTTPS.
+Copy `backend/.env.example` to `backend/.env` and set a long random `JWT_SECRET`. SMTP is not required. Set `COOKIE_SECURE=true` when serving over HTTPS.
 
 ## Local Setup
 
@@ -141,7 +134,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. Use `/onboarding` for the existing anonymous flow, `/sign-up` or `/sign-in` for OTP authentication, `/jobs` for authenticated personalized jobs, and `/community` for the authenticated community.
+Open `http://localhost:3000`. Use `/onboarding` for the existing anonymous flow, `/sign-up` or `/sign-in` for password authentication, `/jobs` for authenticated personalized jobs, and `/community` for the authenticated community.
 
 ## Testing and Migration
 
@@ -161,13 +154,13 @@ python -m pytest
 alembic upgrade head
 ```
 
-The new migration is `20260908_03_auth_jobs_community`. It is additive and supports upgrading both a clean database and the existing development database without deleting learner data. Curated job rows are seeded lazily into SQLite when job recommendations are first requested.
+The migrations `20260908_03_auth_jobs_community` and `20260909_04_password_auth` are additive and preserve existing users and learner data. Curated job rows are seeded lazily into SQLite when job recommendations are first requested.
 
 ## Architecture
 
 The Next.js frontend uses the existing app routes, Tailwind design system, API client, local learner store, and learner context provider. Authenticated access tokens live in session storage only; refresh tokens are httpOnly cookies. The FastAPI backend adds auth, jobs, and community routers beside the existing profile, skill, recommendation, learning-path, and adaptive routers. SQLAlchemy models are registered through the existing Alembic metadata.
 
-The job service exposes a provider-shaped `get_job_recommendations` boundary while using SQLite today. A future live provider could replace the seeded provider without changing the frontend response contract.
+The job service exposes a provider-shaped `get_job_recommendations` boundary while using SQLite today. It receives the authenticated learner's existing domain and readiness context. Community uses the same learner domain taxonomy for its default feed. A future live job provider could replace the seeded provider without changing the frontend response contract.
 
 ## Future Extensions
 

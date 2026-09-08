@@ -1,82 +1,88 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
-import logging
 import secrets
-import smtplib
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 
 import jwt
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Learner, OTPCode, RefreshToken, User
+from app.models import Learner, RefreshToken, User
 
-logger = logging.getLogger(__name__)
-
-
-class SMTPConfigurationError(RuntimeError):
-    pass
-
-
-def normalize_email(email: str) -> str:
-    return email.strip().casefold()
+SCRYPT_N = 16_384
+SCRYPT_R = 8
+SCRYPT_P = 1
+SCRYPT_DKLEN = 64
 
 
-def request_otp(db: Session, email: str) -> None:
-    validate_smtp_configuration()
+def signup(db: Session, name: str, email: str, phone: str, password: str, learner_id: str | None = None) -> tuple[User, str | None]:
     normalized_email = normalize_email(email)
-    user = db.scalar(select(User).where(User.email == normalized_email))
-    if user is None:
-        user = User(email=normalized_email)
-        db.add(user)
-        db.flush()
+    if db.scalar(select(User).where(User.email == normalized_email)) is not None:
+        raise HTTPException(status_code=409, detail="An account with that email already exists.")
 
-    cutoff = utc_now() - timedelta(hours=1)
-    recent_count = db.scalar(
-        select(func.count(OTPCode.id)).where(OTPCode.user_id == user.id, OTPCode.created_at >= cutoff)
-    ) or 0
-    if recent_count >= 5:
-        raise HTTPException(status_code=429, detail="Too many OTP requests. Please try again later.")
-
-    otp = f"{secrets.randbelow(1_000_000):06d}"
-    send_otp_email(normalized_email, otp)
-    db.add(OTPCode(user_id=user.id, code_hash=hash_value(otp), expires_at=utc_now() + timedelta(minutes=7)))
-    db.commit()
-
-
-def verify_otp(db: Session, email: str, otp: str, learner_id: str | None = None) -> tuple[User, str | None]:
-    user = db.scalar(select(User).where(User.email == normalize_email(email)))
-    if user is None:
-        raise HTTPException(status_code=400, detail="The email or OTP is not valid.")
-
-    code = db.scalar(
-        select(OTPCode)
-        .where(OTPCode.user_id == user.id, OTPCode.consumed_at.is_(None))
-        .order_by(OTPCode.created_at.desc())
+    user = User(
+        name=name.strip(),
+        email=normalized_email,
+        phone=phone.strip(),
+        password_hash=hash_password(password),
+        verified_at=utc_now(),
     )
-    now = utc_now()
-    if code is None or is_expired(code.expires_at, now) or not hmac.compare_digest(code.code_hash, hash_value(otp)):
-        raise HTTPException(status_code=400, detail="The email or OTP is not valid or has expired.")
-
-    code.consumed_at = now
-    user.verified_at = now
-    learner = None
-    if learner_id:
-        learner = db.get(Learner, learner_id)
-        if learner is not None and learner.user_id not in (None, user.id):
-            raise HTTPException(status_code=409, detail="That learner profile is linked to another account.")
-        if learner is not None:
-            learner.user_id = user.id
-    if learner is None:
-        learner = db.scalar(select(Learner).where(Learner.user_id == user.id).order_by(Learner.created_at.desc()))
+    db.add(user)
+    db.flush()
+    linked_learner = link_learner(db, user, learner_id)
     db.commit()
     db.refresh(user)
-    return user, learner.id if learner else None
+    return user, linked_learner.id if linked_learner else None
+
+
+def login(db: Session, email: str, password: str, learner_id: str | None = None) -> tuple[User, str | None]:
+    user = db.scalar(select(User).where(User.email == normalize_email(email)))
+    if user is None or not user.password_hash or not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Email or password is incorrect.")
+
+    linked_learner = link_learner(db, user, learner_id)
+    if linked_learner is None:
+        linked_learner = db.scalar(select(Learner).where(Learner.user_id == user.id).order_by(Learner.created_at.desc()))
+    db.commit()
+    return user, linked_learner.id if linked_learner else None
+
+
+def link_learner(db: Session, user: User, learner_id: str | None) -> Learner | None:
+    if not learner_id:
+        return None
+    learner = db.get(Learner, learner_id)
+    if learner is None:
+        raise HTTPException(status_code=404, detail="Learner profile not found.")
+    if learner.user_id not in (None, user.id):
+        raise HTTPException(status_code=409, detail="That learner profile is linked to another account.")
+    learner.user_id = user.id
+    return learner
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=SCRYPT_DKLEN)
+    encoded_salt = base64.urlsafe_b64encode(salt).decode("ascii")
+    encoded_digest = base64.urlsafe_b64encode(digest).decode("ascii")
+    return f"scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${encoded_salt}${encoded_digest}"
+
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        algorithm, n, r, p, encoded_salt, encoded_digest = encoded.split("$", 5)
+        if algorithm != "scrypt":
+            return False
+        salt = base64.urlsafe_b64decode(encoded_salt.encode("ascii"))
+        expected = base64.urlsafe_b64decode(encoded_digest.encode("ascii"))
+        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=int(n), r=int(r), p=int(p), dklen=len(expected))
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
 
 
 def create_access_token(user: User) -> tuple[str, int]:
@@ -88,11 +94,7 @@ def create_access_token(user: User) -> tuple[str, int]:
 def create_refresh_token(db: Session, user: User) -> str:
     token_id = secrets.token_urlsafe(24)
     expires_at = utc_now() + timedelta(days=settings.refresh_token_days)
-    token = jwt.encode(
-        {"sub": user.id, "jti": token_id, "type": "refresh", "exp": expires_at},
-        require_jwt_secret(),
-        algorithm=settings.jwt_algorithm,
-    )
+    token = jwt.encode({"sub": user.id, "jti": token_id, "type": "refresh", "exp": expires_at}, require_jwt_secret(), algorithm=settings.jwt_algorithm)
     db.add(RefreshToken(user_id=user.id, token_hash=hash_value(token), expires_at=expires_at))
     db.commit()
     return token
@@ -109,9 +111,9 @@ def rotate_refresh_token(db: Session, token: str) -> tuple[User, str, int, str |
         raise HTTPException(status_code=401, detail="Refresh session is no longer valid.")
     record.revoked_at = now
     db.flush()
-    refresh_token = create_refresh_token(db, user)
+    next_refresh = create_refresh_token(db, user)
     learner = db.scalar(select(Learner).where(Learner.user_id == user.id).order_by(Learner.created_at.desc()))
-    return user, refresh_token, settings.access_token_minutes * 60, learner.id if learner else None
+    return user, next_refresh, settings.access_token_minutes * 60, learner.id if learner else None
 
 
 def revoke_refresh_token(db: Session, token: str | None) -> None:
@@ -133,32 +135,12 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
     return payload
 
 
-def send_otp_email(email: str, otp: str) -> None:
-    message = EmailMessage()
-    message["Subject"] = "Your FusionPath verification code"
-    message["From"] = settings.smtp_from_email
-    message["To"] = email
-    message.set_content(f"Your FusionPath verification code is {otp}. It expires in 7 minutes.")
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-            if settings.smtp_use_tls:
-                server.starttls()
-            if settings.smtp_username:
-                server.login(settings.smtp_username, settings.smtp_password)
-            server.send_message(message)
-    except (OSError, smtplib.SMTPException) as error:
-        raise SMTPConfigurationError("SMTP delivery failed.") from error
-
-
-def validate_smtp_configuration() -> None:
-    if not settings.smtp_host or not settings.smtp_from_email:
-        raise SMTPConfigurationError("SMTP configuration is incomplete.")
-    if bool(settings.smtp_username) != bool(settings.smtp_password):
-        raise SMTPConfigurationError("SMTP authentication configuration is incomplete.")
-
-
 def hash_value(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().casefold()
 
 
 def utc_now() -> datetime:

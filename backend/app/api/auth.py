@@ -1,35 +1,25 @@
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
-import logging
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models import Learner, User
-from app.schemas.auth import AuthResponse, AuthUser, OTPRequest, OTPVerifyRequest, RefreshResponse
+from app.models import User
+from app.schemas.auth import AuthResponse, AuthUser, LoginRequest, RefreshResponse, SignupRequest
 from app.services import auth_service
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 REFRESH_COOKIE = "fusionpath_refresh_token"
 
 
-@router.post("/otp/request")
-def request_otp(payload: OTPRequest, db: Session = Depends(get_db)) -> dict[str, str]:
-    try:
-        auth_service.request_otp(db, payload.email)
-    except auth_service.SMTPConfigurationError as error:
-        logger.exception("OTP email delivery is unavailable: %s", error)
-        raise HTTPException(status_code=503, detail="Email verification is temporarily unavailable. Please contact the administrator.") from error
-    return {"message": "A verification code was sent if SMTP is configured for this environment."}
+@router.post("/signup", response_model=AuthResponse, status_code=201)
+def signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)) -> AuthResponse:
+    user, learner_id = auth_service.signup(db, payload.name, payload.email, payload.phone, payload.password, payload.learner_id)
+    return issue_session(response, db, user, learner_id)
 
 
-@router.post("/otp/verify", response_model=AuthResponse)
-def verify_otp(payload: OTPVerifyRequest, response: Response, db: Session = Depends(get_db)) -> AuthResponse:
-    user, learner_id = auth_service.verify_otp(db, payload.email, payload.otp, payload.learner_id)
-    access_token, expires_in = auth_service.create_access_token(user)
-    refresh_token = auth_service.create_refresh_token(db, user)
-    set_refresh_cookie(response, refresh_token)
-    return AuthResponse(access_token=access_token, expires_in=expires_in, user=AuthUser.model_validate(user, from_attributes=True), learner_id=learner_id)
+@router.post("/login", response_model=AuthResponse)
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> AuthResponse:
+    user, learner_id = auth_service.login(db, payload.email, payload.password, payload.learner_id)
+    return issue_session(response, db, user, learner_id)
 
 
 @router.post("/refresh", response_model=RefreshResponse)
@@ -47,6 +37,13 @@ def logout(response: Response, db: Session = Depends(get_db), refresh_token: str
     auth_service.revoke_refresh_token(db, refresh_token)
     response.delete_cookie(REFRESH_COOKIE, httponly=True, secure=auth_service.settings.cookie_secure, samesite="lax")
     return {"message": "Signed out."}
+
+
+def issue_session(response: Response, db: Session, user: User, learner_id: str | None) -> AuthResponse:
+    access_token, expires_in = auth_service.create_access_token(user)
+    refresh_token = auth_service.create_refresh_token(db, user)
+    set_refresh_cookie(response, refresh_token)
+    return AuthResponse(access_token=access_token, expires_in=expires_in, user=AuthUser.model_validate(user, from_attributes=True), learner_id=learner_id)
 
 
 def set_refresh_cookie(response: Response, token: str) -> None:
