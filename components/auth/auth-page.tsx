@@ -72,7 +72,7 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof ApiError && typeof error.detail === "object" && error.detail && "detail" in error.detail && typeof error.detail.detail === "string") return error.detail.detail;
+  if (error instanceof ApiError && error.status === 503) return "Email verification is currently unavailable. Please try again later.";
   if (error instanceof ApiError) return error.userMessage;
-  return "The request could not be completed. Check the backend configuration and try again.";
+  return "Email verification is currently unavailable. Please try again later.";
 }

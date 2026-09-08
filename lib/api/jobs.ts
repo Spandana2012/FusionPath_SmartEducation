@@ -9,6 +9,7 @@ export type JobListing = {
   link: string;
   posted_date: string | null;
   seniority: string;
+  match_reason: string;
 };
 
 export type JobRecommendations = { learner_id: string; domain: string; jobs: JobListing[]; message: string };

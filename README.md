@@ -18,7 +18,7 @@ The current additive phase also includes:
 - In-database OTP rate limiting, hashed OTP storage, expiry, single-use verification, and optional linking to an existing anonymous learner.
 - Readiness-aware job recommendations from curated SQLite listings for the existing five-role taxonomy.
 - Authenticated domain-based community posts, replies, and basic report flags.
-- A Community route and a Recommended Jobs section added to the existing Career view.
+- A Community route, an authenticated Jobs route, and a Recommended Jobs preview added to the existing Career view.
 
 No external LLM, job-board API, moderation service, SMS provider, or hosted database is required.
 
@@ -65,6 +65,7 @@ New endpoints:
 - `POST /api/community/replies/{id}/report`
 
 Community reads and writes require a verified access token. Refresh tokens are never returned in JSON or stored in localStorage.
+Job recommendations also require a verified access token and the requested learner to be linked to that account.
 
 ## Database
 
@@ -113,10 +114,10 @@ SMTP_PORT=587
 SMTP_USERNAME=your-smtp-user
 SMTP_PASSWORD=your-smtp-password
 SMTP_FROM_EMAIL=no-reply@example.com
-SMTP_STARTTLS=true
+SMTP_USE_TLS=true
 ```
 
-Copy `backend/.env.example` to `backend/.env` and set real values. OTP requests fail with a clear configuration error when SMTP is missing; the application never returns or stores a plaintext OTP. Set `COOKIE_SECURE=true` when serving over HTTPS.
+Copy `backend/.env.example` to `backend/.env` and set real values. `SMTP_HOST` and `SMTP_FROM_EMAIL` are required. Set both `SMTP_USERNAME` and `SMTP_PASSWORD` for authenticated SMTP, or leave both blank when the SMTP server permits unauthenticated sending. `SMTP_USE_TLS=true` enables STARTTLS. Gmail users should use an App Password where supported, never their normal account password. OTP requests fail safely when SMTP is missing; the frontend shows a generic availability message while detailed configuration errors stay in server logs. The application never returns or stores a plaintext OTP. Set `COOKIE_SECURE=true` when serving over HTTPS.
 
 ## Local Setup
 
@@ -140,7 +141,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. Use `/onboarding` for the existing anonymous flow, `/sign-up` or `/sign-in` for OTP authentication, and `/community` for the authenticated community.
+Open `http://localhost:3000`. Use `/onboarding` for the existing anonymous flow, `/sign-up` or `/sign-in` for OTP authentication, `/jobs` for authenticated personalized jobs, and `/community` for the authenticated community.
 
 ## Testing and Migration
 

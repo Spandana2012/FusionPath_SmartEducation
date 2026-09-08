@@ -18,7 +18,7 @@ class Settings:
     smtp_username: str = os.getenv("SMTP_USERNAME", "")
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from_email: str = os.getenv("SMTP_FROM_EMAIL", "")
-    smtp_starttls: bool = os.getenv("SMTP_STARTTLS", "true").casefold() == "true"
+    smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", os.getenv("SMTP_STARTTLS", "true")).casefold() == "true"
 
     @property
     def cors_origins(self) -> list[str]:

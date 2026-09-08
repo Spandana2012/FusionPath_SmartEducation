@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models import Learner, OTPCode, RefreshToken, User
 
+logger = logging.getLogger(__name__)
+
 
 class SMTPConfigurationError(RuntimeError):
     pass
@@ -25,6 +28,7 @@ def normalize_email(email: str) -> str:
 
 
 def request_otp(db: Session, email: str) -> None:
+    validate_smtp_configuration()
     normalized_email = normalize_email(email)
     user = db.scalar(select(User).where(User.email == normalized_email))
     if user is None:
@@ -40,9 +44,9 @@ def request_otp(db: Session, email: str) -> None:
         raise HTTPException(status_code=429, detail="Too many OTP requests. Please try again later.")
 
     otp = f"{secrets.randbelow(1_000_000):06d}"
+    send_otp_email(normalized_email, otp)
     db.add(OTPCode(user_id=user.id, code_hash=hash_value(otp), expires_at=utc_now() + timedelta(minutes=7)))
     db.commit()
-    send_otp_email(normalized_email, otp)
 
 
 def verify_otp(db: Session, email: str, otp: str, learner_id: str | None = None) -> tuple[User, str | None]:
@@ -130,21 +134,27 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
 
 
 def send_otp_email(email: str, otp: str) -> None:
-    required = [settings.smtp_host, settings.smtp_from_email]
-    if not all(required):
-        raise SMTPConfigurationError("SMTP is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL before requesting an OTP.")
-
     message = EmailMessage()
     message["Subject"] = "Your FusionPath verification code"
     message["From"] = settings.smtp_from_email
     message["To"] = email
     message.set_content(f"Your FusionPath verification code is {otp}. It expires in 7 minutes.")
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-        if settings.smtp_starttls:
-            server.starttls()
-        if settings.smtp_username:
-            server.login(settings.smtp_username, settings.smtp_password)
-        server.send_message(message)
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+            if settings.smtp_use_tls:
+                server.starttls()
+            if settings.smtp_username:
+                server.login(settings.smtp_username, settings.smtp_password)
+            server.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        raise SMTPConfigurationError("SMTP delivery failed.") from error
+
+
+def validate_smtp_configuration() -> None:
+    if not settings.smtp_host or not settings.smtp_from_email:
+        raise SMTPConfigurationError("SMTP configuration is incomplete.")
+    if bool(settings.smtp_username) != bool(settings.smtp_password):
+        raise SMTPConfigurationError("SMTP authentication configuration is incomplete.")
 
 
 def hash_value(value: str) -> str:

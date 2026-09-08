@@ -12,6 +12,7 @@ class JobListingResponse(BaseModel):
     link: str
     posted_date: datetime | None
     seniority: str
+    match_reason: str = ""
 
 
 class JobRecommendationsResponse(BaseModel):

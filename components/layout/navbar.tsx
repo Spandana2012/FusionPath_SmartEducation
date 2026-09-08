@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Bot,
+  BriefcaseBusiness,
   ChartNoAxesColumnIncreasing,
   LayoutDashboard,
   Menu,
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { label: "My Learning", href: "/learning", icon: Route },
   { label: "Skills", href: "/skill-analysis", icon: Network },
   { label: "Career", href: "/career", icon: ChartNoAxesColumnIncreasing },
+  { label: "Jobs", href: "/jobs", icon: BriefcaseBusiness },
   { label: "AI Tutor", href: "/tutor", icon: Bot },
   { label: "Community", href: "/community", icon: UsersRound },
   { label: "Profile", href: "/profile", icon: UserRound },

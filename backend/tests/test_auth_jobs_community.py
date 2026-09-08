@@ -13,6 +13,11 @@ from app.services import auth_service
 
 settings.jwt_secret = "test-secret-for-fusionpath"
 settings.cookie_secure = False
+settings.smtp_host = "smtp.test"
+settings.smtp_from_email = "no-reply@example.com"
+settings.smtp_username = ""
+settings.smtp_password = ""
+settings.smtp_use_tls = False
 client = TestClient(app)
 
 
@@ -83,6 +88,17 @@ def test_otp_rate_limit_allows_five_requests_per_hour() -> None:
     assert response.status_code == 429
 
 
+def test_smtp_configuration_failure_is_generic_and_does_not_create_otp(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "smtp_host", "")
+    monkeypatch.setattr(settings, "smtp_from_email", "")
+    target = email()
+    response = client.post("/api/auth/otp/request", json={"email": target})
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Email verification is temporarily unavailable. Please contact the administrator."
+    with SessionLocal() as db:
+        assert db.scalar(select(User).where(User.email == target)) is None
+
+
 def test_refresh_rotates_and_logout_revokes_session() -> None:
     target = email()
     code = request_code(target)
@@ -100,14 +116,18 @@ def profile(goal: str, experience: str = "intermediate") -> dict:
 
 
 def test_jobs_are_domain_specific_and_readiness_aware() -> None:
-    analyst = client.post("/api/profile/analyze", json=profile("Data Analyst", "beginner")).json()
-    frontend = client.post("/api/profile/analyze", json=profile("Frontend Developer")).json()
-    analyst_jobs = client.get(f"/api/jobs/recommendations/{analyst['learner_id']}")
-    frontend_jobs = client.get(f"/api/jobs/recommendations/{frontend['learner_id']}")
+    assert client.get("/api/jobs/recommendations/not-authenticated").status_code == 401
+    analyst_headers = auth_headers(email())
+    frontend_headers = auth_headers(email())
+    analyst = client.post("/api/profile/analyze", headers=analyst_headers, json=profile("Data Analyst", "beginner")).json()
+    frontend = client.post("/api/profile/analyze", headers=frontend_headers, json=profile("Frontend Developer")).json()
+    analyst_jobs = client.get(f"/api/jobs/recommendations/{analyst['learner_id']}", headers=analyst_headers)
+    frontend_jobs = client.get(f"/api/jobs/recommendations/{frontend['learner_id']}", headers=frontend_headers)
     assert analyst_jobs.status_code == frontend_jobs.status_code == 200
     assert analyst_jobs.json()["domain"] == "Data Analyst"
     assert frontend_jobs.json()["domain"] == "Frontend Developer"
     assert analyst_jobs.json()["jobs"][0]["domain"] != frontend_jobs.json()["jobs"][0]["domain"]
+    assert analyst_jobs.json()["jobs"][0]["match_reason"]
     assert all(job["seniority"] in {"entry", "junior", "mid"} for job in analyst_jobs.json()["jobs"][:2])
 
 

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,6 +8,7 @@ from app.models import Learner, User
 from app.schemas.auth import AuthResponse, AuthUser, OTPRequest, OTPVerifyRequest, RefreshResponse
 from app.services import auth_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 REFRESH_COOKIE = "fusionpath_refresh_token"
 
@@ -16,7 +18,8 @@ def request_otp(payload: OTPRequest, db: Session = Depends(get_db)) -> dict[str,
     try:
         auth_service.request_otp(db, payload.email)
     except auth_service.SMTPConfigurationError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        logger.exception("OTP email delivery is unavailable: %s", error)
+        raise HTTPException(status_code=503, detail="Email verification is temporarily unavailable. Please contact the administrator.") from error
     return {"message": "A verification code was sent if SMTP is configured for this environment."}
 
 
